@@ -1,0 +1,26 @@
+# Build context excludes — keep the image small and reproducible.
+**/node_modules
+.git
+.github
+
+# Build output (the image rebuilds the frontend itself)
+public
+
+# Runtime state (must be mounted, never baked into the image)
+backend/data
+backend/*.log
+backend/*.pid
+**/*.db
+**/*.db-shm
+**/*.db-wal
+
+# Local config / internal dev files (never shipped)
+.env
+.chronicle
+docs
+BACKLOG.md
+CLAUDE.md
+.scannerwork
+
+# Editor / OS cruft
+.DS_Store
