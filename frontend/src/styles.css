@@ -1,0 +1,890 @@
+@import 'tailwindcss';
+
+/* The dark: variant is bound to data-scheme (independent of any specific theme name — adding a second
+   dark theme later won't require touching the dark: binding; Tailwind's default dark: follows
+   prefers-color-scheme, decoupled from the theme system). The scheme is defined by the Settings THEMES table */
+@custom-variant dark ([data-scheme='dark'] &);
+
+/*
+ * Theme system: a set of color tokens per theme.
+ * Design language: hairline borders instead of shadows, strong type-size contrast, uppercase tracked labels.
+ * Themes: classic (default, a custom warm palette) plus tributes to well-known editor color schemes
+ * (Solarized / Catppuccin / GitHub / Dracula / Monokai / One Dark Pro / Tokyo Night / Gruvbox / Nord / Rosé Pine).
+ * Derived colors (card-user / tool / subagent / destructive) all target AA text contrast (≥ 4.5:1 on card).
+ */
+
+/* Classic — Recensa's own warm palette (default; the only in-house theme, the rest are tributes to well-known editor color schemes) */
+:root,
+[data-theme='classic'] {
+  color-scheme: light;
+  --background: #f5ede0;
+  --card: #ffffff;
+  --card-user: #f4e7db;
+  --primary: #a8503a;
+  --primary-foreground: #ffffff;
+  --secondary: #5c6f4e;
+  --accent: #efe5d2;
+  --foreground: #2c1810;
+  --muted-foreground: #6f5f4b;
+  --border: #d8c9ad;
+  --destructive: #b3372f;
+  --thinking: #6f5f4b;
+  --tool: #5c6f4e;
+  --subagent: #7d651f;
+  --code-bg: #f3ede1;
+  /* Categorical palette for data visualization (shared by KPI big numbers / pie charts / bar meters; tuned per theme and follows the active theme) */
+  --chart-1: #2c5aa0;
+  --chart-2: #e8762d;
+  --chart-3: #1a8a4a;
+  --chart-4: #8b5cf6;
+  --chart-5: #c0392b;
+  --chart-6: #0e7f96;
+  --chart-7: #c33fb0;
+  --chart-8: #b8860b;
+}
+
+/* ── Classic editor themes (color tributes, not official ports; signature hex values taken from each official spec, derived semantic colors verified against WCAG AA) ── */
+
+/* Dracula — Zeno Rocha, MIT */
+[data-theme='dracula'] {
+  color-scheme: dark;
+  --background: #282a36;
+  --card: #2f313f;
+  --card-user: #362f47;
+  --primary: #bd93f9;
+  --primary-foreground: #1e1f29;
+  --secondary: #ff79c6;
+  --accent: #383a4c;
+  --foreground: #f8f8f2;
+  --muted-foreground: #8a94c4;
+  --border: #414458;
+  --destructive: #ff5555;
+  --thinking: #8a94c4;
+  --tool: #8be9fd;
+  --subagent: #50fa7b;
+  --code-bg: #21222c;
+  --chart-1: #bd93f9;
+  --chart-2: #ff79c6;
+  --chart-3: #8be9fd;
+  --chart-4: #50fa7b;
+  --chart-5: #ffb86c;
+  --chart-6: #ff5555;
+  --chart-7: #f1fa8c;
+  --chart-8: #69dfc0;
+}
+
+/* Monokai — Wimer Hazenberg */
+[data-theme='monokai'] {
+  color-scheme: dark;
+  --background: #272822;
+  --card: #2f3129;
+  --card-user: #362a30;
+  --primary: #f92672;
+  --primary-foreground: #14140f;
+  --secondary: #a6e22e;
+  --accent: #34352c;
+  --foreground: #f8f8f2;
+  --muted-foreground: #a19d89;
+  --border: #3e3d32;
+  --destructive: #f83333;
+  --thinking: #a19d89;
+  --tool: #66d9ef;
+  --subagent: #a6e22e;
+  --code-bg: #1e1f1c;
+  --chart-1: #f92672;
+  --chart-2: #a6e22e;
+  --chart-3: #fd971f;
+  --chart-4: #66d9ef;
+  --chart-5: #ae81ff;
+  --chart-6: #e6db74;
+  --chart-7: #fd5c63;
+  --chart-8: #4fd6a8;
+}
+
+/* One Dark Pro — Atom / binaryify, MIT */
+[data-theme='onedark'] {
+  color-scheme: dark;
+  --background: #282c34;
+  --card: #2c313a;
+  --card-user: #2b3346;
+  --primary: #61afef;
+  --primary-foreground: #14161a;
+  --secondary: #c678dd;
+  --accent: #323644;
+  --foreground: #abb2bf;
+  --muted-foreground: #8b93a8;
+  --border: #3e4451;
+  --destructive: #e06c75;
+  --thinking: #8b93a8;
+  --tool: #56b6c2;
+  --subagent: #98c379;
+  --code-bg: #21252b;
+  --chart-1: #61afef;
+  --chart-2: #e06c75;
+  --chart-3: #98c379;
+  --chart-4: #e5c07b;
+  --chart-5: #c678dd;
+  --chart-6: #56b6c2;
+  --chart-7: #d19a66;
+  --chart-8: #e06c9a;
+}
+
+/* Tokyo Night — enkia, MIT */
+[data-theme='tokyonight'] {
+  color-scheme: dark;
+  --background: #1a1b26;
+  --card: #1f2335;
+  --card-user: #232a44;
+  --primary: #7aa2f7;
+  --primary-foreground: #12131c;
+  --secondary: #bb9af7;
+  --accent: #20233a;
+  --foreground: #a9b1d6;
+  --muted-foreground: #7e88b3;
+  --border: #292e42;
+  --destructive: #f7768e;
+  --thinking: #7e88b3;
+  --tool: #7dcfff;
+  --subagent: #9ece6a;
+  --code-bg: #16161e;
+  --chart-1: #7aa2f7;
+  --chart-2: #bb9af7;
+  --chart-3: #7dcfff;
+  --chart-4: #9ece6a;
+  --chart-5: #ff9e64;
+  --chart-6: #f7768e;
+  --chart-7: #e0af68;
+  --chart-8: #2ac3de;
+}
+
+/* Gruvbox Dark — morhetz, MIT */
+[data-theme='gruvbox'] {
+  color-scheme: dark;
+  --background: #282828;
+  --card: #3c3836;
+  --card-user: #473829;
+  --primary: #fe8019;
+  --primary-foreground: #1d2021;
+  --secondary: #8ec07c;
+  --accent: #504945;
+  --foreground: #ebdbb2;
+  --muted-foreground: #a89984;
+  --border: #665c54;
+  --destructive: #ff5a46;
+  --thinking: #b1a290;
+  --tool: #92b4a7;
+  --subagent: #b8bb26;
+  --code-bg: #1d2021;
+  --chart-1: #fb4934;
+  --chart-2: #fe8019;
+  --chart-3: #fabd2f;
+  --chart-4: #b8bb26;
+  --chart-5: #8ec07c;
+  --chart-6: #83a598;
+  --chart-7: #d3869b;
+  --chart-8: #a89984;
+}
+
+/* Solarized Light — Ethan Schoonover, MIT (some accent colors darkened from the official accent to pass WCAG, hue preserved) */
+[data-theme='solarized'] {
+  color-scheme: light;
+  --background: #fdf6e3;
+  --card: #eee8d5;
+  --card-user: #dce8ee;
+  --primary: #1e6ea8;
+  --primary-foreground: #fdf6e3;
+  --secondary: #2aa198;
+  --accent: #ddeaf5;
+  --foreground: #586e75;
+  --muted-foreground: #657b83;
+  --border: #d5cbb0;
+  --destructive: #b82420;
+  --thinking: #93a1a1;
+  --tool: #0f6058;
+  --subagent: #5a6900;
+  --code-bg: #eee8d5;
+  --chart-1: #268bd2;
+  --chart-2: #2aa198;
+  --chart-3: #859900;
+  --chart-4: #b58900;
+  --chart-5: #cb4b16;
+  --chart-6: #dc322f;
+  --chart-7: #d33682;
+  --chart-8: #6c71c4;
+}
+
+/* Catppuccin Latte — Catppuccin org, MIT (muted/tool/subagent darkened from the official accent to pass WCAG, hue preserved) */
+[data-theme='catppuccin'] {
+  color-scheme: light;
+  --background: #eff1f5;
+  --card: #ffffff;
+  --card-user: #dbe7fd;
+  --primary: #1e66f5;
+  --primary-foreground: #ffffff;
+  --secondary: #8839ef;
+  --accent: #e6e9ef;
+  --foreground: #4c4f69;
+  --muted-foreground: #64677a;
+  --border: #9ca0b0;
+  --destructive: #d20f39;
+  --thinking: #9ca0b0;
+  --tool: #0a6e74;
+  --subagent: #1e7814;
+  --code-bg: #e6e9ef;
+  --chart-1: #1e66f5;
+  --chart-2: #8839ef;
+  --chart-3: #ea76cb;
+  --chart-4: #40a02b;
+  --chart-5: #df8e1d;
+  --chart-6: #fe640b;
+  --chart-7: #d20f39;
+  --chart-8: #179299;
+}
+
+/* Nord — arcticicestudio, MIT */
+[data-theme='nord'] {
+  color-scheme: dark;
+  --background: #2e3440;
+  --card: #3b4252;
+  --card-user: #3a4a5e;
+  --primary: #88c0d0;
+  --primary-foreground: #2e3440;
+  --secondary: #a3be8c;
+  --accent: #434c5e;
+  --foreground: #eceff4;
+  --muted-foreground: #9aabc4;
+  --border: #4c566a;
+  --destructive: #bf616a;
+  --thinking: #7f8fa6;
+  --tool: #9fc1de;
+  --subagent: #ebcb8b;
+  --code-bg: #2e3440;
+  --chart-1: #88c0d0;
+  --chart-2: #a3be8c;
+  --chart-3: #ebcb8b;
+  --chart-4: #bf616a;
+  --chart-5: #b48ead;
+  --chart-6: #d08770;
+  --chart-7: #5e81ac;
+  --chart-8: #8fbcbb;
+}
+
+/* GitHub Dark — GitHub / Primer, MIT */
+[data-theme='githubdark'] {
+  color-scheme: dark;
+  --background: #0d1117;
+  --card: #161b22;
+  --card-user: #16233a;
+  --primary: #58a6ff;
+  --primary-foreground: #0d1117;
+  --secondary: #3fb950;
+  --accent: #21262d;
+  --foreground: #c9d1d9;
+  --muted-foreground: #8b949e;
+  --border: #30363d;
+  --destructive: #f85149;
+  --thinking: #6e7681;
+  --tool: #39c5cf;
+  --subagent: #3fb950;
+  --code-bg: #161b22;
+  --chart-1: #58a6ff;
+  --chart-2: #3fb950;
+  --chart-3: #f85149;
+  --chart-4: #bc8cff;
+  --chart-5: #d29922;
+  --chart-6: #39c5cf;
+  --chart-7: #db61a2;
+  --chart-8: #e3b341;
+}
+
+/* GitHub Light — GitHub / Primer, MIT */
+[data-theme='githublight'] {
+  color-scheme: light;
+  --background: #f6f8fa;
+  --card: #ffffff;
+  --card-user: #eef3fc;
+  --primary: #0969da;
+  --primary-foreground: #ffffff;
+  --secondary: #1a7f37;
+  --accent: #eaeef2;
+  --foreground: #1f2328;
+  --muted-foreground: #656d76;
+  --border: #d0d7de;
+  --destructive: #cf222e;
+  --thinking: #57606a;
+  --tool: #1b7c83;
+  --subagent: #1a7f37;
+  --code-bg: #f6f8fa;
+  --chart-1: #0969da;
+  --chart-2: #1a7f37;
+  --chart-3: #cf222e;
+  --chart-4: #8250df;
+  --chart-5: #bc4c00;
+  --chart-6: #1b7c83;
+  --chart-7: #bf3989;
+  --chart-8: #9a6700;
+}
+
+/* Catppuccin Mocha — Catppuccin org, MIT */
+[data-theme='mocha'] {
+  color-scheme: dark;
+  --background: #1e1e2e;
+  --card: #313244;
+  --card-user: #2b2438;
+  --primary: #cba6f7;
+  --primary-foreground: #11111b;
+  --secondary: #89b4fa;
+  --accent: #45475a;
+  --foreground: #cdd6f4;
+  --muted-foreground: #a6adc8;
+  --border: #6c7086;
+  --destructive: #f38ba8;
+  --thinking: #6c7086;
+  --tool: #89b4fa;
+  --subagent: #a6e3a1;
+  --code-bg: #181825;
+  --chart-1: #cba6f7;
+  --chart-2: #89b4fa;
+  --chart-3: #f5c2e7;
+  --chart-4: #a6e3a1;
+  --chart-5: #f9e2af;
+  --chart-6: #fab387;
+  --chart-7: #f38ba8;
+  --chart-8: #b4befe;
+}
+
+/* Solarized Dark — Ethan Schoonover, MIT (tool/subagent nudged in lightness from the official cyan/green to pass WCAG, hue unchanged) */
+[data-theme='solarizeddark'] {
+  color-scheme: dark;
+  --background: #002b36;
+  --card: #073642;
+  --card-user: #0a3d4d;
+  --primary: #268bd2;
+  --primary-foreground: #001b23;
+  --secondary: #6c71c4;
+  --accent: #586e75;
+  --foreground: #93a1a1;
+  --muted-foreground: #839496;
+  --border: #657b83;
+  --destructive: #dc322f;
+  --thinking: #586e75;
+  --tool: #3eb0a5;
+  --subagent: #9cb300;
+  --code-bg: #002b36;
+  --chart-1: #268bd2;
+  --chart-2: #2aa198;
+  --chart-3: #859900;
+  --chart-4: #b58900;
+  --chart-5: #cb4b16;
+  --chart-6: #dc322f;
+  --chart-7: #d33682;
+  --chart-8: #6c71c4;
+}
+
+/* Rosé Pine — rose-pine, MIT */
+[data-theme='rosepine'] {
+  color-scheme: dark;
+  --background: #191724;
+  --card: #1f1d2e;
+  --card-user: #241f38;
+  --primary: #c4a7e7;
+  --primary-foreground: #191724;
+  --secondary: #ebbcba;
+  --accent: #26233a;
+  --foreground: #e0def4;
+  --muted-foreground: #908caa;
+  --border: #6e6a86;
+  --destructive: #eb6f92;
+  --thinking: #6e6a86;
+  --tool: #9ccfd8;
+  --subagent: #f6c177;
+  --code-bg: #26233a;
+  --chart-1: #c4a7e7;
+  --chart-2: #9ccfd8;
+  --chart-3: #ebbcba;
+  --chart-4: #f6c177;
+  --chart-5: #31748f;
+  --chart-6: #eb6f92;
+  --chart-7: #908caa;
+  --chart-8: #6e6a86;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-card: var(--card);
+  --color-card-user: var(--card-user);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-accent: var(--accent);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-thinking: var(--thinking);
+  --color-tool: var(--tool);
+  --color-subagent: var(--subagent);
+  --color-code-bg: var(--code-bg);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-chart-7: var(--chart-7);
+  --color-chart-8: var(--chart-8);
+
+  /* typography / spacing / radius
+   * Body/UI text falls back to the system CJK stack (no CJK webfont is loaded — an MB-scale download isn't worth it);
+   * mono loads JetBrains Mono (via @fontsource in main.tsx); display is reserved for the brand wordmark "Recensa"
+   * (Bricolage Grotesque, a tiny Latin subset) */
+  /* DM Sans leads (soft-geometric, pairs with the rounded UI, consistent across OSes); the CJK system stack is only a fallback for stray CJK text */
+  --font-sans: 'DM Sans Variable', 'DM Sans', 'Noto Sans TC', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+  --font-mono: 'JetBrains Mono', 'IBM Plex Mono', 'SF Mono', monospace;
+  --font-display: 'Bricolage Grotesque Variable', 'Bricolage Grotesque', var(--font-sans);
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 16px;
+
+  /* type scale (capped at 6 steps): micro = meta/eyebrow, caption = xs, body = sm, title = header row, heading = lg, display = big stat numbers.
+   * The three near-identical values 10 / 10.5 / 11px all collapse into micro (a sub-pixel difference carries no hierarchy information, pure noise) */
+  --text-micro: 11px;
+  --text-micro--line-height: 1.45;
+  --text-title: 15px;
+  --text-title--line-height: 1.4;
+  --text-display: 26px;
+  --text-display--line-height: 1.15;
+
+  /* Unified letter-spacing for eyebrow labels (the three values 0.14/0.16/0.18em were collapsed; the masthead's 0.28em is a deliberate exception) */
+  --tracking-eyebrow: 0.16em;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  transition: background-color 0.25s ease, color 0.25s ease; /* soft transition on theme change */
+}
+
+/* Custom scrollbar: thin, rounded, thumb bound to the theme color (adapts to every theme automatically); darker on hover, darker still while dragging */
+* {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 38%, transparent) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted-foreground) 34%, transparent);
+  border-radius: 8px;
+  border: 2px solid transparent; /* inset so the thumb looks thinner and more refined */
+  background-clip: content-box;
+  transition: background-color 0.15s ease;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--muted-foreground) 58%, transparent);
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:active {
+  background: color-mix(in srgb, var(--primary) 70%, transparent);
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Cards/borders transition softly in step on theme change (compositor-friendly properties) */
+article,
+section,
+aside,
+nav,
+header {
+  transition: background-color 0.25s ease, border-color 0.25s ease;
+}
+
+/* ---------- Animations (only compositor properties + height, all ≤ 200ms) ---------- */
+@keyframes collapsible-down {
+  from {
+    height: 0;
+    opacity: 0.4;
+  }
+  to {
+    height: var(--radix-collapsible-content-height);
+    opacity: 1;
+  }
+}
+
+@keyframes collapsible-up {
+  from {
+    height: var(--radix-collapsible-content-height);
+  }
+  to {
+    height: 0;
+  }
+}
+
+.collapsible-content {
+  overflow: hidden;
+}
+
+.collapsible-content[data-state='open'] {
+  animation: collapsible-down 220ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.collapsible-content[data-state='closed'] {
+  animation: collapsible-up 200ms cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@keyframes fade-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.panel-enter {
+  animation: fade-slide-in 180ms ease-out;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.fade-in {
+  animation: fade-in 150ms ease-out;
+}
+
+/* Loading three-dot bounce */
+@keyframes loading-dot {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  40% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+.loading-dot {
+  animation: loading-dot 1.2s ease-in-out infinite;
+}
+
+/* Brief highlight on the target message after a jump (fade in → hold → fade out, easier for the eye to
+ * catch than a plain fade; the primary-color tint follows the active theme, using the same color-mix
+ * convention as elsewhere). A left primary-color bar further marks "this is the one". */
+@keyframes session-flash {
+  0% { background-color: transparent; box-shadow: inset 3px 0 0 transparent; }
+  12% {
+    background-color: color-mix(in srgb, var(--primary) 30%, transparent);
+    box-shadow: inset 3px 0 0 var(--primary);
+  }
+  65% {
+    background-color: color-mix(in srgb, var(--primary) 30%, transparent);
+    box-shadow: inset 3px 0 0 var(--primary);
+  }
+  100% { background-color: transparent; box-shadow: inset 3px 0 0 transparent; }
+}
+.session-flash {
+  animation: session-flash 2s ease-out;
+  border-radius: 8px;
+}
+
+/* In-page focus mode: while the outermost container carries data-zen, hide all surrounding chrome
+ * marked data-chrome in one place (side panels / top bar / breadcrumb / reading-position meta / tag row).
+ * Components themselves never need to know about the zen layout concept. */
+[data-zen] [data-chrome] {
+  display: none !important;
+}
+
+/* Horizontal scroll for Markdown tables on narrow screens (as ChatGPT's web UI does): renderMarkdown wraps <table> in this container */
+.md-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* Skeleton shimmer sweep */
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: -180% 0;
+  }
+  100% {
+    background-position: 180% 0;
+  }
+}
+.skeleton {
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--muted-foreground) 12%, transparent) 25%,
+    color-mix(in srgb, var(--muted-foreground) 22%, transparent) 50%,
+    color-mix(in srgb, var(--muted-foreground) 12%, transparent) 75%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+/* Note: a @media (prefers-reduced-motion: reduce) block that disabled the expand/fade animations
+   (the standard accessibility approach) was intentionally omitted — animations always play. Re-add it
+   if honoring the system preference becomes desirable. */
+
+/* Markdown typography — line height from researched values: 1.7 for CJK body text (WCAG ≥ 1.5 / Ant 1.571 / the upper end of the 1.5–1.75 long-form convention) */
+.markdown {
+  line-height: 1.7;
+  overflow-wrap: break-word;
+  /* Reading-area font size (the Settings dialog sets documentElement[data-font-size]); default is medium */
+  font-size: var(--reader-font-size, 14px);
+}
+:root[data-font-size='sm'] {
+  --reader-font-size: 12.5px;
+}
+:root[data-font-size='md'] {
+  --reader-font-size: 14px;
+}
+:root[data-font-size='lg'] {
+  --reader-font-size: 16px;
+}
+
+.markdown p {
+  margin-block: 0.9em; /* paragraph spacing of about one font size, paired with the 1.7 line height */
+}
+
+.markdown p:first-child {
+  margin-block-start: 0;
+}
+
+.markdown p:last-child {
+  margin-block-end: 0;
+}
+
+.markdown li {
+  line-height: 1.7;
+  margin-block: 0.3em;
+}
+
+/* Horizontal rule (--- → <hr>): after the CSS reset it has no margin and would crowd the surrounding text */
+.markdown hr {
+  margin-block: 1.2em;
+  border: 0;
+  border-top: 1px solid var(--border);
+}
+
+.markdown pre {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+/* code block wrapper: a relative container around each code block to position the copy button */
+.code-block-wrapper {
+  position: relative;
+  margin: 0.4em 0;
+}
+
+.code-block-wrapper pre {
+  margin: 0;
+}
+
+/* code copy button: top-right corner, hidden by default, revealed only on container hover */
+.code-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  cursor: pointer;
+  line-height: 1;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--muted-foreground);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.code-block-wrapper:hover .code-copy-btn {
+  opacity: 1;
+}
+
+.code-copy-btn:hover {
+  background: var(--accent);
+  color: var(--foreground);
+}
+
+.markdown code {
+  background: var(--code-bg);
+  border-radius: var(--radius-sm);
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+
+.markdown pre code {
+  background: none;
+  padding: 0;
+}
+
+.markdown table {
+  border-collapse: collapse;
+  margin: 8px 0;
+}
+
+.markdown th,
+.markdown td {
+  border: 1px solid var(--border);
+  padding: 4px 10px;
+  line-height: 1.5; /* table cells hold short text, tighter than body copy */
+}
+
+.markdown blockquote {
+  border-left: 2.5px solid var(--secondary);
+  margin: 8px 0;
+  padding-left: 12px;
+  color: var(--muted-foreground);
+}
+
+.markdown a {
+  color: var(--tool);
+}
+
+.markdown h1,
+.markdown h2,
+.markdown h3,
+.markdown h4 {
+  line-height: 1.3; /* larger type uses a tighter relative line height */
+  font-weight: 600;
+  margin-block: 1.2em 0.5em; /* more space above than below, so it doesn't crowd the following content and separates from the previous block */
+}
+.markdown h1:first-child,
+.markdown h2:first-child,
+.markdown h3:first-child,
+.markdown h4:first-child {
+  margin-block-start: 0;
+}
+.markdown h1 {
+  font-size: 1.3em;
+}
+.markdown h2 {
+  font-size: 1.18em;
+}
+.markdown h3 {
+  font-size: 1.08em;
+}
+.markdown h4 {
+  font-size: 1em;
+}
+
+/* Vertical spacing around list containers (li items already have margins; the container also needs separation from paragraphs) */
+.markdown ul,
+.markdown ol {
+  margin-block: 0.6em;
+  padding-inline-start: 1.5em;
+}
+
+/* highlight.js token colors — bound to the theme palette variables, no external theme CSS (they follow the active theme automatically) */
+/* Syntax highlighting: fixed mid-brightness colors (legible on both light and dark themes, not polluted by CSS variables) */
+.hljs {
+  color: var(--foreground);
+  background: transparent;
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: #6a737d;
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-tag {
+  color: #a626a4;
+}
+
+.hljs-string,
+.hljs-addition {
+  color: #0a7a3a;
+}
+
+.hljs-number,
+.hljs-literal,
+.hljs-symbol {
+  color: #c75b00;
+}
+
+.hljs-title,
+.hljs-section,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class {
+  color: #1e5fd7;
+}
+
+.hljs-type,
+.hljs-built_in {
+  color: #8b6c00;
+}
+
+.hljs-attr,
+.hljs-attribute,
+.hljs-template-variable,
+.hljs-regexp {
+  color: #c75b00;
+}
+
+.hljs-variable {
+  color: #c82829;
+}
+
+.hljs-deletion {
+  color: #c82829;
+}
+
+.hljs-meta,
+.hljs-doctag {
+  color: #1b8c9e;
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 700;
+}
+
+.hljs-link {
+  color: #1e5fd7;
+  text-decoration: underline;
+}

@@ -1,0 +1,54 @@
+# CI: install and check the backend + frontend on Linux and Windows across supported
+# Node versions, and prove the Docker image still builds.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]   # test on Linux + Windows
+        node: [22, 24]                         # node:sqlite floor is 22
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Disable autocrlf (Windows correctness)
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: Backend — install & check
+        working-directory: backend
+        run: |
+          npm ci
+          npm run check          # type-check + lint + unit tests
+
+      - name: Frontend — install, check & build
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run check          # tsc --noEmit + lint
+          npm run build
+
+  # The published artifact is the Docker image — prove it still builds on every change,
+  # not just when a release tag triggers the publish workflow.
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          cache-from: type=gha

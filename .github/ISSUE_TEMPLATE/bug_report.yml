@@ -1,0 +1,39 @@
+name: Bug report
+description: Something in Recensa is broken or behaves unexpectedly
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. docker compose up -d --build
+        2. Open http://localhost:7788
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      placeholder: "e.g. Windows 11 + Docker Desktop 4.43 / macOS 15 (M2) / Ubuntu 24.04"
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Container logs
+      description: "Output of `node backend/scripts/ops.js logs` (or `docker logs recensa`) around the failure. Redact anything sensitive."
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Image tag / commit
+      placeholder: "e.g. s40911120/recensa:0.1.0, or a commit hash if built from source"
