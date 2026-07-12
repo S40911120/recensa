@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Recensa</title>
+    <link rel="icon" type="image/png" href="/favicon.png" />
+  </head>
+  <body>
+    <script>
+      // Apply the theme and font size before paint: don't wait for React to mount, so dark-mode users no longer see a light flash on every load (FOUC)
+      (function () {
+        try {
+          var t = localStorage.getItem('recensa:theme');
+          if (t) {
+            document.documentElement.dataset.theme = t;
+            // Keep this dark-theme list in sync with Settings THEMES / app.js DARK_THEMES (three places to update when adding a dark theme)
+            document.documentElement.dataset.scheme = ['dracula', 'monokai', 'onedark', 'tokyonight', 'gruvbox', 'nord', 'githubdark', 'mocha', 'solarizeddark', 'rosepine'].indexOf(t) >= 0 ? 'dark' : 'light';
+          }
+          var f = localStorage.getItem('recensa:font-size');
+          if (f) document.documentElement.dataset.fontSize = f;
+        } catch (e) { /* localStorage unavailable -> fall back to the default theme */ }
+      })();
+    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

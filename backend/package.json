@@ -1,0 +1,29 @@
+{
+  "name": "recensa-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Recensa — local god-view web viewer for Claude Code session history (backend)",
+  "license": "MIT",
+  "author": "Justin Chen",
+  "main": "src/server.js",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node src/server.js",
+    "index": "node src/ingestion/indexer.js",
+    "lint": "eslint .",
+    "type-check": "node scripts/check.js",
+    "test": "node --test",
+    "check": "npm run type-check && npm run lint && npm test"
+  },
+  "dependencies": {
+    "chokidar": "^4.0.3",
+    "express": "^4.21.2",
+    "@recensa/claude-session": "^0.1.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "eslint": "10.6.0",
+    "globals": "17.7.0"
+  }
+}
