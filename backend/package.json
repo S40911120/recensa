@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "chokidar": "^4.0.3",
-    "express": "^4.21.2",
+    "express": "^5.2.1",
     "@recensa/claude-session": "^0.1.1",
     "ws": "^8.18.0"
   },
