@@ -16,7 +16,7 @@
     "check": "npm run type-check && npm run lint && npm test"
   },
   "dependencies": {
-    "chokidar": "^4.0.3",
+    "chokidar": "^5.0.0",
     "express": "^4.21.2",
     "@recensa/claude-session": "^0.1.1",
     "ws": "^8.18.0"
