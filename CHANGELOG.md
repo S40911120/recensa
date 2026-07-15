@@ -6,6 +6,8 @@ a public release cadence is set.
 
 ## [Unreleased]
 
+## [0.1.1] — 2026-07-16
+
 ### Fixed
 - **Linux: container could not read `~/.claude/projects`** — the image ran as a
   fixed uid (1001), while `~/.claude/projects` is created owner-only (700/600) by
