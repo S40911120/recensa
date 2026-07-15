@@ -21,12 +21,24 @@ services:
       # bind-mount fs-events are unreliable (Docker Desktop Win/Mac disables inotify) -> the watcher auto-detects /.dockerenv and uses tick mode:
       # adaptive hot-spot incremental scan (active session hot-scan ~700ms, idle cold full-scan 5 min, all in the index worker -> no main-thread freeze, far less CPU than continuous polling).
       # Overridable: RECENSA_WATCH_MODE=events|tick, RECENSA_TICK_HOT_MS, RECENSA_FULL_SCAN_MS
+      # Linux only: the container starts as root and docker-entrypoint.sh re-homes
+      # its internal appuser to match the bind-mounted directory's actual uid/gid
+      # before dropping privileges, so it can read the host's ~/.claude/projects
+      # (created 700/600, owner-only) with no configuration. Set PUID/PGID here only
+      # to override that detection (e.g. the mount's owner is not the intended uid).
+      PUID: "${PUID:-}"
+      PGID: "${PGID:-}"
     volumes:
       # original session JSONL — writable so delete-session can physically remove files (parity with native host).
       # App discipline keeps it read-only in practice: only deleteSession writes/removes; indexer/parser/reconstruct never write here.
+      # bind.selinux: z relabels the mount so SELinux-enforcing hosts (RHEL/Fedora/CentOS,
+      # Podman) don't deny access even when the uid/gid already match; ignored outright
+      # on hosts without SELinux, so this is always safe to set.
       - type: bind
         source: "${CLAUDE_HOME:-${HOME}/.claude}"
         target: /data/claude
+        bind:
+          selinux: z
       # DB persistence: viewer.db (rebuildable cache) + flags.db (precious user data — pins/tags/notes)
       - recensa-data:/app/backend/data
     restart: unless-stopped

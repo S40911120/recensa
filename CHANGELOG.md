@@ -4,6 +4,23 @@ All notable changes to Recensa are documented here. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions are date-tagged until
 a public release cadence is set.
 
+## [Unreleased]
+
+### Fixed
+- **Linux: container could not read `~/.claude/projects`** — the image ran as a
+  fixed uid (1001), while `~/.claude/projects` is created owner-only (700/600) by
+  the host Claude Code CLI, so any host uid other than 1001 (in practice, almost
+  everyone) hit `EACCES` on every file. The container now starts as root and
+  `docker-entrypoint.sh` re-homes its internal user to match the bind-mounted
+  directory's actual uid/gid before dropping privileges via `gosu` — no
+  configuration required, including under rootless Docker's uid remapping, since
+  detection reads whatever the container itself sees rather than assuming a fixed
+  number. `PUID`/`PGID` remain available to force a specific uid/gid. The bind
+  mount also picks up the standard SELinux relabel option (`:z` / `bind.selinux:
+  z`), fixing the same symptom on SELinux-enforcing hosts (RHEL/Fedora/CentOS,
+  Podman) where uid/gid alone isn't sufficient. Not applicable to macOS/Windows
+  Docker Desktop. (#15)
+
 ## [0.1.0] — 2026-07-12
 
 First public release.

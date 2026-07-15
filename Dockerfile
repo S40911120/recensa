@@ -26,16 +26,25 @@ ENV NODE_ENV=production \
     SESSION_VIEWER_PORT=7788
 WORKDIR /app
 
+# gosu: privilege drop in docker-entrypoint.sh (root -> appuser after uid/gid re-home).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends gosu \
+ && rm -rf /var/lib/apt/lists/*
+
 # backend/ and public/ sit as siblings; config.js resolves PUBLIC_DIR as backend/src/../../public.
 COPY --from=build /app/backend/ ./backend/
 COPY --from=build /app/public/ ./public/
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Non-root user + a writable data dir (the DB named volume mounts here).
+# Non-root user (uid re-homed to $PUID/$PGID at container start, see docker-entrypoint.sh)
+# + a writable data dir (the DB named volume mounts here). Image starts as root so the
+# entrypoint can re-home the uid and drop privileges; app code never runs as root.
 RUN useradd -r -u 1001 -m appuser \
  && mkdir -p /app/backend/data \
  && chown -R appuser:appuser /app
-USER appuser
 
 WORKDIR /app/backend
 EXPOSE 7788
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "src/server.js"]

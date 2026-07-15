@@ -53,11 +53,18 @@ You need Docker (Docker Desktop on Windows/macOS, Docker Engine on Linux) and a
 ```bash
 # macOS / Linux
 docker run -d --name recensa -p 127.0.0.1:7788:7788 \
-  -v "$HOME/.claude:/data/claude" \
+  -v "$HOME/.claude:/data/claude:z" \
   -v recensa-data:/app/backend/data \
   -e RECENSA_PROJECTS_DIR=/data/claude/projects \
   s40911120/recensa
 ```
+
+On Linux, `~/.claude/projects` is created owner-only (700/600) by the host CLI, so the
+container needs a matching uid/gid to read it — it detects this on its own from the
+mount, no flags required. The trailing `:z` relabels the mount for SELinux-enforcing
+hosts (RHEL/Fedora/CentOS, Podman); it's a no-op everywhere else, including macOS and
+Windows Docker Desktop, so it's safe to always include. Override the detected uid/gid
+with `-e PUID=... -e PGID=...` if the mount's owner isn't the account you want.
 
 ```powershell
 # Windows — use PowerShell, not Git Bash (MSYS rewrites the /data/... paths)
