@@ -1,12 +1,14 @@
 {
   "name": "recensa-backend",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Recensa — local god-view web viewer for Claude Code session history (backend)",
   "license": "MIT",
   "author": "Justin Chen",
   "main": "src/server.js",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "start": "node src/server.js",
     "index": "node src/ingestion/indexer.js",
