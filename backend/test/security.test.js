@@ -48,7 +48,7 @@ test('method defaults to a safe GET when absent (Origin stays optional)', () => 
 test('isAllowedHost primitive: allowMissing governs the empty case; the port is ignored', () => {
   assert.equal(isAllowedHost(undefined), false);
   assert.equal(isAllowedHost(undefined, { allowMissing: true }), true);
-  assert.equal(isAllowedHost('sessions.local:9999'), true); // port irrelevant to the hostname allowlist
+  assert.equal(isAllowedHost('localhost:9999'), true); // port irrelevant to the hostname allowlist
   assert.equal(isAllowedHost('http://127.0.0.1:5178'), true);
   assert.equal(isAllowedHost('[::1]:7788'), true); // IPv6 loopback: url.hostname is the bracketed form [::1]
   assert.equal(isAllowedHost('http://attacker.test'), false);
