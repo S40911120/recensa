@@ -32,7 +32,7 @@ function renderIndex() {
   } catch {
     // DB not ready (before the first index) -> serve with the default theme
   }
-  return indexCache.html.replace('<html lang="zh-Hant">', `<html lang="zh-Hant"${attrs}>`);
+  return indexCache.html.replace('<html lang="en">', `<html lang="en"${attrs}>`);
 }
 
 function createApp() {
