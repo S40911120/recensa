@@ -6,6 +6,68 @@ a public release cadence is set.
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-07-16
+
+Deploy-robustness release: a broad review across deployment environments (native
+Linux, Docker Desktop, rootless Docker/Podman, NAS, WSL2) focused on one goal —
+anyone can deploy quickly and diagnose failures from the logs alone.
+
+### Upgrade notes
+
+No data migration is required from 0.1.0 or 0.1.1. Both databases carry over as-is
+(`flags.db` is never touched; the `viewer.db` schema is unchanged), and data-volume
+file ownership from the 0.1.0 fixed-uid era is corrected automatically at container
+start. One action may be required:
+
+- **If you access the UI via a custom hostname such as `sessions.local`** (as the
+  0.1.0 README once suggested), that name is no longer on the built-in Host
+  allowlist and requests will return 403 after upgrading. Set
+  `RECENSA_ALLOWED_HOSTS=<your-hostname>` and restart. Access via
+  `http://localhost:<port>` needs no change.
+
+### Fixed
+- **Rootless Docker / Podman**: the container now detects a rootless engine (via
+  `/proc/self/uid_map`) and runs as container root — which maps to the unprivileged
+  host user and is typically the only uid able to read the owner-only mount.
+  Explicit `PUID=0` is also honored now instead of being rejected.
+- **`docker run` without `-e RECENSA_PROJECTS_DIR` crashed**: the image now bakes in
+  `/data/claude/projects` (the documented mount target), so the flag is unnecessary
+  — the README one-liners dropped it.
+- **Mount pointing at a file (or missing) failed far from the cause**: the
+  entrypoint now calls out a missing or non-directory mount at the top of the logs,
+  and the server fails fast at startup on a non-directory projects root instead of
+  dying later as a bare `ENOTDIR` in the index worker.
+- **`/api/health` stayed green while the index worker crash-looped**: worker
+  respawns now back off exponentially, and five consecutive crashes flip health to
+  503 instead of "healthy but the UI is empty". The health probe now ships as a
+  Dockerfile `HEALTHCHECK`, so every deploy path — `docker run` included — reports
+  an unhealthy container, not only the from-source Compose file.
+- **Reverse-proxy / custom-hostname 403s were silent server-side**: rejected
+  Host/Origin values are now logged (rate-limited, sanitized) with a pointer to
+  `RECENSA_ALLOWED_HOSTS`.
+- **Server-side theme injection (zero-FOUC) silently did nothing**: the injection
+  anchor still targeted the pre-0.1.0 `lang="zh-Hant"` html tag and never matched
+  after the UI moved to `lang="en"` — cold loads flashed the default theme before
+  the frontend applied the saved one.
+
+### Added
+- Startup read probe: transcripts with a different owner than the directory (e.g.
+  created via `sudo claude`) now produce one clear warning with the `chown` fix,
+  instead of silent per-file `EACCES` skips.
+- Distinct empty states in the session list: "no sessions yet" (with indexing /
+  mount guidance) vs "no matching sessions" (filters active).
+- README: Upgrading section, prebuilt-image Compose example, rootless/Podman and
+  sudo-owned-files troubleshooting, WSL2 and cmd.exe notes, Compose v2 requirement,
+  and docker-native equivalents for repo-less deploys.
+
+### Changed
+- Docker Desktop (macOS/Windows): the root-owned-mount fallback message is now an
+  informational line explaining it is the expected path there, not a warning.
+- `sessions.local` removed from the built-in Host allowlist (a development
+  leftover); use `RECENSA_ALLOWED_HOSTS` for custom hostnames.
+- `EADDRINUSE` and database-open failures now say which knob to turn
+  (`RECENSA_HOST_PORT` / data-volume mount) instead of a bare error.
+
 ## [0.1.1] — 2026-07-16
 
 ### Fixed
@@ -15,9 +77,8 @@ a public release cadence is set.
   everyone) hit `EACCES` on every file. The container now starts as root and
   `docker-entrypoint.sh` re-homes its internal user to match the bind-mounted
   directory's actual uid/gid before dropping privileges via `gosu` — no
-  configuration required, including under rootless Docker's uid remapping, since
-  detection reads whatever the container itself sees rather than assuming a fixed
-  number. `PUID`/`PGID` remain available to force a specific uid/gid. The bind
+  configuration required on rootful engines (rootless engines remained broken
+  until 0.1.2). `PUID`/`PGID` remain available to force a specific uid/gid. The bind
   mount also picks up the standard SELinux relabel option (`:z` / `bind.selinux:
   z`), fixing the same symptom on SELinux-enforcing hosts (RHEL/Fedora/CentOS,
   Podman) where uid/gid alone isn't sufficient. Not applicable to macOS/Windows
