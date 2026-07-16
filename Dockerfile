@@ -21,9 +21,12 @@ RUN npm run build
 
 # ---------- runtime stage ----------
 FROM node:24-slim AS runner
+# RECENSA_PROJECTS_DIR matches the documented mount target (-v .../.claude:/data/claude),
+# so a plain `docker run` needs no -e flag for it; override only for a custom layout.
 ENV NODE_ENV=production \
     SESSION_VIEWER_HOST=0.0.0.0 \
-    SESSION_VIEWER_PORT=7788
+    SESSION_VIEWER_PORT=7788 \
+    RECENSA_PROJECTS_DIR=/data/claude/projects
 WORKDIR /app
 
 # gosu: privilege drop in docker-entrypoint.sh (root -> appuser after uid/gid re-home).
