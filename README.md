@@ -45,37 +45,60 @@ transcripts, and the index is a disposable cache you can rebuild at any time.
 
 ## Quick start
 
-You need Docker (Docker Desktop on Windows/macOS, Docker Engine on Linux) and a
-`~/.claude` directory with some sessions in it.
+You need Docker (Docker Desktop on Windows/macOS; Docker Engine with Compose v2 on
+Linux) and a `~/.claude` directory with some sessions in it. Rootless Docker and
+Podman work too — uid alignment is automatic. Give the container ~1 GB of memory
+headroom for the first big index.
 
 **Try it** — run the prebuilt image straight from Docker Hub:
 
 ```bash
-# macOS / Linux
+# macOS / Linux (also WSL2 with Docker Engine inside WSL)
 docker run -d --name recensa -p 127.0.0.1:7788:7788 \
   -v "$HOME/.claude:/data/claude:z" \
   -v recensa-data:/app/backend/data \
-  -e RECENSA_PROJECTS_DIR=/data/claude/projects \
   s40911120/recensa
 ```
 
 On Linux, `~/.claude/projects` is created owner-only (700/600) by the host CLI, so the
 container needs a matching uid/gid to read it — it detects this on its own from the
-mount, no flags required. The trailing `:z` relabels the mount for SELinux-enforcing
-hosts (RHEL/Fedora/CentOS, Podman); it's a no-op everywhere else, including macOS and
-Windows Docker Desktop, so it's safe to always include. Override the detected uid/gid
-with `-e PUID=... -e PGID=...` if the mount's owner isn't the account you want.
+mount, no flags required (override with `-e PUID=... -e PGID=...` if the mount's owner
+isn't the account you want). The trailing `:z` relabels the mount for SELinux-enforcing
+hosts (RHEL/Fedora/CentOS, Podman); it's a no-op everywhere else, so it's safe to
+always include.
 
 ```powershell
-# Windows — use PowerShell, not Git Bash (MSYS rewrites the /data/... paths)
+# Windows — use PowerShell, not Git Bash (MSYS rewrites the /data/... paths).
+# In cmd.exe, replace $env:USERPROFILE with %USERPROFILE% and the backticks with ^.
 docker run -d --name recensa -p 127.0.0.1:7788:7788 `
   -v "$env:USERPROFILE\.claude:/data/claude" `
   -v recensa-data:/app/backend/data `
-  -e RECENSA_PROJECTS_DIR=/data/claude/projects `
   s40911120/recensa
 ```
 
-**Or run it from source** with Compose:
+**Or with Compose**, using the prebuilt image:
+
+```yaml
+# compose.yaml
+services:
+  recensa:
+    image: s40911120/recensa
+    container_name: recensa
+    ports:
+      - "127.0.0.1:7788:7788"
+    volumes:
+      - type: bind
+        source: /home/you/.claude        # your absolute .claude path
+        target: /data/claude
+        bind:
+          selinux: z
+      - recensa-data:/app/backend/data
+    restart: unless-stopped
+volumes:
+  recensa-data:
+```
+
+**Or from source**:
 
 ```bash
 git clone https://github.com/S40911120/recensa.git && cd recensa
@@ -84,8 +107,11 @@ docker compose up -d --build
 ```
 
 Then open **http://localhost:7788**. The first index runs in a background worker and
-can take minutes to tens of minutes depending on how many sessions you have — the
-UI is usable while it runs, and progress shows in a floating pill in the corner.
+can take minutes to tens of minutes depending on how many sessions you have — the UI
+is usable while it runs, and progress shows in a floating pill in the corner. An empty
+list while that pill is moving is normal; an empty list with **no** pill means the
+mount points at the wrong place — check `docker logs recensa` (the container calls out
+mount problems explicitly) and see [Troubleshooting](#troubleshooting).
 
 ## A tour
 
@@ -222,6 +248,9 @@ picture from the transcripts already on your disk:
 - **Not a Claude Code replacement.** It reads the transcripts Claude Code already
   writes to disk.
 - **Not a general log viewer.** Built for Claude Code session JSONL, not arbitrary logs.
+- **Not a multi-user or fleet service.** One machine, one `~/.claude`, one viewer.
+  Kubernetes manifests, multi-host transcript aggregation, and public-internet
+  exposure are out of scope by design.
 
 ## Themes
 
@@ -238,15 +267,48 @@ so there is no flash of the wrong theme on load.
 | ![Catppuccin Mocha](./assets/screenshots/theme-mocha.png) | ![Solarized Light](./assets/screenshots/theme-solarized.png) | ![GitHub Light](./assets/screenshots/theme-githublight.png) |
 | Catppuccin Mocha | Solarized Light | GitHub Light |
 
+## Upgrading
+
+The git tag is the source of truth; every release ships to Docker Hub as
+`s40911120/recensa:<version>` and `:latest` (see [VERSIONING](./VERSIONING.md) and the
+[CHANGELOG](./CHANGELOG.md)). Your pins/tags/notes live in the `recensa-data` named
+volume and survive upgrades untouched; the index cache rebuilds itself when needed.
+
+```bash
+# docker run path
+docker pull s40911120/recensa
+docker rm -f recensa
+# ...then rerun the same `docker run` one-liner from Quick start
+
+# compose path (prebuilt image)
+docker compose pull && docker compose up -d
+
+# compose path (from source)
+git pull && docker compose up -d --build
+```
+
 ## Troubleshooting
 
 **The reader loads but the session list is empty, or the logs show an empty mount.**
-`CLAUDE_HOME` did not resolve to your `.claude` directory. On Windows, Compose's
-`${HOME}` fallback is usually unset under PowerShell and cmd, so the bind mount comes
-up empty. Set `CLAUDE_HOME` explicitly in `.env` to an absolute path with forward
-slashes (`C:/Users/you/.claude`), then rebuild with `node backend/scripts/ops.js up`.
-If you used the `docker run` one-liner from Git Bash instead of PowerShell, MSYS path
-rewriting is the likely culprit — rerun it from PowerShell.
+The mount points at the wrong place. Check `docker logs recensa` — the container
+prints an explicit `docker-entrypoint: ... does not exist` line when the mounted
+directory is missing. On the Compose-from-source path the usual cause is
+`CLAUDE_HOME`: on Windows, Compose's `${HOME}` fallback is typically unset under
+PowerShell and cmd, so the bind mount comes up empty. Set `CLAUDE_HOME` explicitly in
+`.env` to an absolute path with forward slashes (`C:/Users/you/.claude`), then rerun
+`docker compose up -d --build`. If you used the `docker run` one-liner from Git Bash
+instead of PowerShell, MSYS path rewriting is the likely culprit — rerun it from
+PowerShell.
+
+**Some sessions are missing, and the logs show `EACCES` on individual files.** A few
+transcripts probably have a different owner than the rest — this happens when the CLI
+was once run with `sudo`. The container warns about it at startup (`resolved uid ...
+cannot read ...`). Fix the ownership on the host: `chown -R $(id -un) ~/.claude/projects`.
+
+**Rootless Docker or Podman.** Supported and automatic: under a rootless engine the
+container detects it and runs as container root, which maps to your unprivileged host
+user — that is what can read the owner-only mount. If you need to force it, set
+`-e PUID=0` explicitly.
 
 **`docker compose up` fails with "port is already allocated", or `7788` never
 responds.** Something else on the host already holds `7788`. Publish on a free port
@@ -260,16 +322,23 @@ The container always listens on `7788` internally; only the host-side port chang
 so open `http://localhost:7799`. Running from source instead of Docker? Set
 `SESSION_VIEWER_PORT` — that is the port the server process itself binds.
 
-**Custom hostname (optional).** To reach it at `http://sessions.local:7788`, add a
-line to your hosts file (as administrator): `127.0.0.1 sessions.local`.
+**Custom hostname (optional).** To reach it at, say, `http://recensa.local:7788`: add
+`127.0.0.1 recensa.local` to your hosts file (as administrator), and add the name to
+the allowlist with `RECENSA_ALLOWED_HOSTS=recensa.local` — without that second step
+the server answers 403 (and logs which host it rejected).
 
 ## Operations
 
-All operations go through one entry point:
+Cloned the repo? All operations go through one entry point (requires Node 22+ on the
+host):
 
 ```bash
 node backend/scripts/ops.js <command>
 ```
+
+Running the prebuilt image without the repo? The native equivalents:
+`docker logs -f recensa` (logs), `docker rm -f recensa` (down), `docker restart
+recensa` (restart).
 
 | Command | What it does |
 |---------|--------------|
@@ -316,8 +385,9 @@ Advanced overrides (for running from source or remote self-hosting):
 |---------|---------|---------|
 | `SESSION_VIEWER_PORT` | `7788` | HTTP/WS port the server listens on. |
 | `SESSION_VIEWER_HOST` | `127.0.0.1` | Bind address. The container sets `0.0.0.0` so the published loopback port can reach it. |
-| `RECENSA_PROJECTS_DIR` | `~/.claude/projects` | Root of the session JSONL tree (shared with the `recensa-session` CLI). The container sets `/data/claude/projects`. |
-| `RECENSA_ALLOWED_HOSTS` | *(none)* | Extra comma-separated hostnames added to the Host/Origin allowlist. Only relevant behind your own reverse proxy (see [Security](#security-and-your-data)). |
+| `RECENSA_PROJECTS_DIR` | `~/.claude/projects` | Root of the session JSONL tree (shared with the `recensa-session` CLI). The image bakes in `/data/claude/projects` (the documented mount target), so Docker deploys don't need to set it. |
+| `PUID` / `PGID` | *(auto)* | Linux only: the uid/gid the container runs as. Auto-detected from the mounted directory's owner; set explicitly only to override that (e.g. `PUID=0` under an unusual rootless setup). |
+| `RECENSA_ALLOWED_HOSTS` | *(none)* | Extra comma-separated hostnames added to the Host/Origin allowlist. Needed behind a reverse proxy or a custom hosts-file name (see [Security](#security-and-your-data)). |
 | `RECENSA_WATCH_MODE` | *(auto)* | Watch strategy: `events` (native fs events) or `tick` (polling). Auto-selects `tick` inside Docker, where bind-mount fs events are unreliable. |
 
 ## Security and your data
@@ -356,11 +426,11 @@ Your transcripts:
 
 No secrets, no telemetry, no external network calls.
 
-## Uninstall
+## Backup and uninstall
 
 Your pins, tags, notes, and titles live in `flags.db`, inside the Docker named volume
 `recensa-data`. That data is not derived from the transcripts and **cannot be
-recomputed**, so back it up before removing anything you want to keep:
+recomputed** — one command backs it up any time (not just before uninstalling):
 
 ```bash
 # with the container still present, copy flags.db out of the volume
