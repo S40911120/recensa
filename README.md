@@ -388,7 +388,7 @@ Advanced overrides (for running from source or remote self-hosting):
 | `RECENSA_PROJECTS_DIR` | `~/.claude/projects` | Root of the session JSONL tree (shared with the `recensa-session` CLI). The image bakes in `/data/claude/projects` (the documented mount target), so Docker deploys don't need to set it. |
 | `PUID` / `PGID` | *(auto)* | Linux only: the uid/gid the container runs as. Auto-detected from the mounted directory's owner; set explicitly only to override that (e.g. `PUID=0` under an unusual rootless setup). |
 | `RECENSA_ALLOWED_HOSTS` | *(none)* | Extra comma-separated hostnames added to the Host/Origin allowlist. Needed behind a reverse proxy or a custom hosts-file name (see [Security](#security-and-your-data)). |
-| `RECENSA_WATCH_MODE` | *(auto)* | Watch strategy: `events` (native fs events) or `tick` (polling). Auto-selects `tick` inside Docker, where bind-mount fs events are unreliable. |
+| `RECENSA_WATCH_MODE` | *(auto)* | Watch strategy: `events` (native fs events) or `tick` (polling). Auto-selects `tick` inside Docker (where bind-mount fs events are unreliable) or when `RECENSA_PROJECTS_DIR` is set. |
 
 ## Security and your data
 
