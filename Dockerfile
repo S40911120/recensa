@@ -49,5 +49,15 @@ RUN useradd -r -u 1001 -m appuser \
 
 WORKDIR /app/backend
 EXPOSE 7788
+
+# Baked into the image so every deploy path gets it (docker run, prebuilt compose,
+# from-source compose). /api/health returns 503 when the index worker is crash-looping,
+# so "healthy" tracks real usability, not just an open port. The probe carries its own
+# client-side timeout so it never hangs for the full window or piles up sockets.
+# start-period covers the first cold index of a very large volume (the worker runs in
+# the background, so the probe itself stays fast).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=3m --retries=3 \
+  CMD ["node", "-e", "const r=require('http').get('http://127.0.0.1:7788/api/health',{timeout:4000},x=>process.exit(x.statusCode===200?0:1));r.on('timeout',()=>{r.destroy();process.exit(1)});r.on('error',()=>process.exit(1))"]
+
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "src/server.js"]

@@ -17,7 +17,7 @@ services:
       - "127.0.0.1:${RECENSA_HOST_PORT:-7788}:7788"
     environment:
       SESSION_VIEWER_HOST: "0.0.0.0"
-      RECENSA_PROJECTS_DIR: /data/claude/projects
+      # RECENSA_PROJECTS_DIR is baked into the image (/data/claude/projects) — no need to repeat it here.
       # bind-mount fs-events are unreliable (Docker Desktop Win/Mac disables inotify) -> the watcher auto-detects /.dockerenv and uses tick mode:
       # adaptive hot-spot incremental scan (active session hot-scan ~700ms, idle cold full-scan 5 min, all in the index worker -> no main-thread freeze, far less CPU than continuous polling).
       # Overridable: RECENSA_WATCH_MODE=events|tick, RECENSA_TICK_HOT_MS, RECENSA_FULL_SCAN_MS
@@ -43,19 +43,8 @@ services:
       - recensa-data:/app/backend/data
     restart: unless-stopped
     init: true          # PID 1 signal forwarding / zombie reaping (running node directly also works, but init is more robust)
-    healthcheck:
-      # Uses a client-side timeout so the probe never hangs for the full timeout or piles up CLOSE_WAIT sockets
-      test:
-        - CMD
-        - node
-        - -e
-        - "const r=require('http').get('http://127.0.0.1:7788/api/health',{timeout:4000},x=>process.exit(x.statusCode===200?0:1));r.on('timeout',()=>{r.destroy();process.exit(1)});r.on('error',()=>process.exit(1))"
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      # v2: indexing runs entirely in the index worker -> the main event-loop stays idle and /api/health still responds instantly during indexing -> healthy within seconds.
-      # start_period keeps headroom for the first cold index of a very large volume (the worker runs in the background, so the health probe is unaffected).
-      start_period: 3m
+    # healthcheck comes from the image (see Dockerfile HEALTHCHECK) so every deploy path
+    # gets the same probe — docker run, prebuilt compose, and this file alike.
 
 volumes:
   recensa-data:
