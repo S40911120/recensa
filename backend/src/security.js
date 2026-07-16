@@ -12,7 +12,7 @@ const EXTRA_HOSTS = (process.env.RECENSA_ALLOWED_HOSTS || '')
 // must be bracketed (a bare `::1` Host fails URL parsing and would never match). Note: `Host: localhost#@evil.com`
 // parses via new URL to hostname `localhost` and is thus allowed but not exploitable -- a browser will not inject a
 // literal `#` into the Host header it sends under DNS-rebinding/CSRF, so no attacker-controlled origin reaches here.
-const ALLOWED_HOSTNAMES = new Set(['127.0.0.1', 'localhost', '[::1]', 'sessions.local', ...EXTRA_HOSTS]);
+const ALLOWED_HOSTNAMES = new Set(['127.0.0.1', 'localhost', '[::1]', ...EXTRA_HOSTS]);
 
 /**
  * Validate a Host or Origin header.

@@ -23,6 +23,14 @@ let discoverInFlight = false;
 let syncQueuedAgain = false;
 let queuedReconcile = false;
 let respawnTimer = null;
+// Worker crash-loop guard: a worker that dies on startup would otherwise respawn every second
+// forever while /api/health stays green. Exponential backoff caps the log/CPU churn, and the
+// consecutive-crash count feeds /api/health so a dead indexer turns the container unhealthy
+// instead of "healthy but the UI is empty".
+let respawnDelayMs = 1000;
+let consecutiveCrashes = 0;
+const RESPAWN_DELAY_MAX_MS = 60_000;
+const UNHEALTHY_CRASH_THRESHOLD = 5;
 
 function start(callbacks = {}) {
   cb = callbacks;
@@ -41,8 +49,18 @@ function onWorkerDown() {
   status.phase = 'idle';
   syncInFlight = false;
   if (respawnTimer) return;
-  log.warn('index worker down — respawning in 1s');
-  respawnTimer = setTimeout(() => { respawnTimer = null; spawn(); log.info('index worker respawned'); }, 1000);
+  consecutiveCrashes += 1;
+  const delay = respawnDelayMs;
+  respawnDelayMs = Math.min(respawnDelayMs * 2, RESPAWN_DELAY_MAX_MS);
+  log.warn(`index worker down (crash #${consecutiveCrashes}) — respawning in ${delay}ms`);
+  respawnTimer = setTimeout(() => { respawnTimer = null; spawn(); log.info('index worker respawned'); }, delay);
+}
+
+// Completed work is the recovery signal (any message would also arrive from a worker that
+// crashes mid-job, which must not reset the backoff).
+function markWorkerHealthy() {
+  consecutiveCrashes = 0;
+  respawnDelayMs = 1000;
 }
 
 function snapshot() {
@@ -51,6 +69,8 @@ function snapshot() {
   return {
     indexing: status.indexing, done: status.done, total: status.total, pct, phase: status.phase,
     changed: status.changed, lastCompletedAt: status.lastCompletedAt, lastMs: status.lastMs,
+    workerCrashes: consecutiveCrashes,
+    workerHealthy: consecutiveCrashes < UNHEALTHY_CRASH_THRESHOLD,
   };
 }
 
@@ -73,6 +93,7 @@ function onProgress(msg) {
 }
 
 function onSyncDone(msg) {
+  markWorkerHealthy();
   status.indexing = false; status.phase = 'idle';
   status.done = msg.total; status.total = msg.total; status.changed = msg.changed;
   status.lastCompletedAt = new Date().toISOString(); status.lastMs = msg.ms;
@@ -98,6 +119,7 @@ function onRemoved(msg) {
 }
 
 function onDiscoverDone(msg) {
+  markWorkerHealthy();
   discoverInFlight = false;
   const nIn = Array.isArray(msg.ingested) ? msg.ingested.length : 0;
   const nRm = Array.isArray(msg.removed) ? msg.removed.length : 0;

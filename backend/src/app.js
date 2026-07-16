@@ -41,8 +41,18 @@ function createApp() {
 
   // DNS rebinding + CSRF protection: reject any request whose Host/Origin is off the allowlist, and require a present
   // Origin on mutating methods (binding to 127.0.0.1 is not a security boundary). See security.isAllowedRequest.
+  // Rejections are logged (rate-limited, header values sanitized against log injection): a reverse-proxy /
+  // custom-domain deploy that forgot RECENSA_ALLOWED_HOSTS otherwise sees only browser-side 403s with a clean
+  // server log — no thread to pull on.
+  const sanitizeHeader = (v) => String(v ?? '').replace(/[^\x20-\x7e]/g, '').slice(0, 100);
+  let lastRejectLogAt = 0;
   app.use((req, res, next) => {
     if (!isAllowedRequest({ host: req.headers.host, origin: req.headers.origin, method: req.method })) {
+      const now = Date.now();
+      if (now - lastRejectLogAt > 60_000) {
+        lastRejectLogAt = now;
+        log.warn(`rejected request — Host "${sanitizeHeader(req.headers.host)}" Origin "${sanitizeHeader(req.headers.origin)}" not on the allowlist; if this is your reverse-proxy or LAN hostname, add it to RECENSA_ALLOWED_HOSTS`);
+      }
       return res.status(403).json({ error: 'forbidden host' });
     }
     next();

@@ -2,7 +2,7 @@
 // Entry point: HTTP + WebSocket + index worker (re-parsing without freezing the main thread) + live-tail watcher
 const { WebSocketServer } = require('ws');
 const { createApp } = require('./app');
-const { HOST, PORT } = require('./config');
+const { HOST, PORT, DATA_DIR } = require('./config');
 const { open } = require('./storage/db');
 const indexService = require('./services/indexService');
 const { getSession } = require('./repositories/sessionRepo');
@@ -28,7 +28,14 @@ process.on('uncaughtException', (err) => {
 
 // The main thread opens first (running schema migration) -> then spawns the index worker (which connects with migrate:false and runs no DDL).
 // The only migrator is the main thread here, ordered before the worker -> no concurrent DDL / destructive migration collision.
-open();
+// A failed open is almost always a data-volume problem; node:sqlite's bare "unable to open database file"
+// carries no path, so wrap it with where and what to check.
+try {
+  open();
+} catch (err) {
+  log.error(`failed to open the database in ${DATA_DIR} — is the data volume mounted and writable? (${err?.message || err})`);
+  process.exit(1);
+}
 log.info('database opened (schema migrated)');
 
 const app = createApp();
@@ -60,7 +67,7 @@ const httpServer = app.listen(PORT, HOST, () => {
 // actionable line for the common case; let anything else propagate to the uncaughtException guard above.
 httpServer.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
-    log.error(`port ${PORT} is already in use — set SESSION_VIEWER_PORT or stop the other instance`);
+    log.error(`port ${PORT} is already in use — under Docker set RECENSA_HOST_PORT (host side) instead; running from source, set SESSION_VIEWER_PORT or stop the other instance`);
     process.exit(1);
   }
   throw err;

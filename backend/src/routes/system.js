@@ -6,7 +6,13 @@ const log = require('../log').scope('system');
 
 const router = Router();
 
-router.get('/api/health', (_req, res) => res.json({ ok: true, ts: new Date().toISOString() }));
+// Health reflects real usability, not just "HTTP responds": an index worker stuck in a
+// crash-loop means an empty/stale UI, so it flips health to 503 (the Docker healthcheck
+// then surfaces it as an unhealthy container instead of a silent green).
+router.get('/api/health', (_req, res) => {
+  const index = indexService.getStatus();
+  res.status(index.workerHealthy ? 200 : 503).json({ ok: index.workerHealthy, ts: new Date().toISOString(), index });
+});
 
 router.get('/api/settings', (_req, res) => {
   try { res.json(repo.getSettings()); } catch (err) {
