@@ -353,7 +353,17 @@ export function SessionList({ filters, onFiltersChange, selectedId, refreshKey, 
               )}
               {error && <p className="p-4 text-sm text-destructive">Failed to load: {error}</p>}
               {!isLoading && !error && sessions.length === 0 && !contentHits && (
-                <p className="p-4 text-sm text-muted-foreground">No matching sessions</p>
+                // Two distinct empty states: filters active → nothing matched; no filters at all →
+                // a fresh deploy where "still indexing" and "mount points at the wrong place" are
+                // otherwise indistinguishable for a new user staring at a blank list.
+                Object.entries(filters).every(([, v]) => v === '' || v === false) ? (
+                  <p className="p-4 text-sm text-muted-foreground">
+                    No sessions yet. If indexing is running (progress pill, bottom corner), they will appear shortly —
+                    otherwise check that your <code className="font-mono">~/.claude</code> mount points at the right directory.
+                  </p>
+                ) : (
+                  <p className="p-4 text-sm text-muted-foreground">No matching sessions</p>
+                )
               )}
               {listHeader}
               <ul>{sessionRows}</ul>
