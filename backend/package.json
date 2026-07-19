@@ -21,7 +21,7 @@
     "chokidar": "^4.0.3",
     "express": "^4.21.2",
     "@recensa/claude-session": "^0.1.2",
-    "ws": "^8.18.0"
+    "ws": "^8.21.1"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
