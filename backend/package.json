@@ -20,7 +20,7 @@
   "dependencies": {
     "chokidar": "^4.0.3",
     "express": "^4.21.2",
-    "@recensa/claude-session": "^0.1.2",
+    "@recensa/claude-session": "^0.1.4",
     "ws": "^8.18.0"
   },
   "devDependencies": {
