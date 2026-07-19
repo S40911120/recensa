@@ -29,7 +29,7 @@
     "clsx": "2.1.1",
     "dompurify": "~3.4.11",
     "highlight.js": "11.11.1",
-    "lucide-react": "1.23.0",
+    "lucide-react": "1.25.0",
     "marked": "~15.0.11",
     "marked-highlight": "2.2.4",
     "react": "~19.1.0",
