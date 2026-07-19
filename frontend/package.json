@@ -24,7 +24,7 @@
     "@radix-ui/react-collapsible": "1.1.16",
     "@radix-ui/react-dialog": "1.1.19",
     "@tailwindcss/vite": "4.3.2",
-    "@tanstack/react-virtual": "3.14.5",
+    "@tanstack/react-virtual": "3.14.6",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "dompurify": "~3.4.11",
