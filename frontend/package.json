@@ -23,7 +23,7 @@
     "@fontsource/jetbrains-mono": "^5.2.8",
     "@radix-ui/react-collapsible": "1.1.16",
     "@radix-ui/react-dialog": "1.1.19",
-    "@tailwindcss/vite": "4.3.2",
+    "@tailwindcss/vite": "4.3.3",
     "@tanstack/react-virtual": "3.14.5",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
