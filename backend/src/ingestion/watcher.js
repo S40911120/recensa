@@ -19,6 +19,11 @@ function resolveMode() {
 const HOT_MS = Number(process.env.RECENSA_TICK_HOT_MS || 700);              // active files, near-instant (single-file incremental, cheap)
 const DISCOVER_MS = Number(process.env.RECENSA_DISCOVER_MS || 6000);        // cheap discovery of new/deleted files (readdir comparison)
 const FULL_SAFETY_MS = Number(process.env.RECENSA_FULL_SCAN_MS || 300_000); // full-scan safety net (5 min; catches growth in non-hot background sessions)
+// Codex's session tree isn't watched by chokidar (a second root, not fs-event-instant here) -> a cheap periodic
+// discover (readdir comparison, no per-file stat) catches new Codex rollout files even in native events mode.
+// notes: this only discovers new/deleted Codex files, not content growth of an already-indexed one (no live-tail
+// for an in-progress Codex session) -> upgrade path is a dedicated chokidar watcher on CODEX_SESSIONS_DIR if that's needed.
+const CODEX_DISCOVER_MS = Number(process.env.RECENSA_CODEX_DISCOVER_MS || 30_000);
 
 function startTick() {
   log.info(`tick mode (Docker bind-mount) — hot=${HOT_MS}ms discover=${DISCOVER_MS}ms full-safety=${FULL_SAFETY_MS}ms`);
@@ -54,7 +59,9 @@ function startEvents() {
   watcher.on('unlink', (filePath) => indexService.removePath(filePath));
   watcher.on('error', (err) => log.error(`watcher error: ${err.message}`));
   log.info(`events mode (native fs-events) — watching ${PROJECTS_DIR}`);
-  return { close: () => watcher.close(), mode: 'events' };
+  const codexDiscoverTimer = setInterval(() => indexService.requestDiscover(), CODEX_DISCOVER_MS);
+  if (codexDiscoverTimer.unref) codexDiscoverTimer.unref();
+  return { close: () => { watcher.close(); clearInterval(codexDiscoverTimer); }, mode: 'events' };
 }
 
 function startWatcher() {

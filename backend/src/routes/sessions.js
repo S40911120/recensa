@@ -39,6 +39,7 @@ router.get('/api/sessions', (req, res) => {
       until: s('until'),
       pinnedOnly: req.query.pinned === '1',
       tag: s('tag'),
+      source: s('source'),
       limit: Math.min(Number(req.query.limit) || 50, PAGE_SIZE_MAX),
       offset: Number(req.query.offset) || 0,
     });
@@ -53,7 +54,7 @@ router.get('/api/sessions', (req, res) => {
   }
 });
 
-router.get('/api/projects', (_req, res) => res.json(repo.listProjects()));
+router.get('/api/projects', (req, res) => res.json(repo.listProjects(req.query.source ? String(req.query.source) : null)));
 
 router.get('/api/session/:id', (req, res) => {
   const row = repo.getSession(req.params.id);
@@ -103,7 +104,7 @@ router.get('/api/session/:id/skills', async (req, res) => {
   const row = repo.getSession(req.params.id);
   if (!row) return res.status(404).json({ error: 'session not found' });
   try {
-    res.json(await listSkillsCached(row.file));
+    res.json(await listSkillsCached(row.file, row.source));
   } catch (err) {
     log.error(`skills ${row.id}: ${err.message}`);
     res.status(500).json({ error: 'Failed to scan skills' });
@@ -123,11 +124,11 @@ router.get('/api/session/:id/locate', async (req, res) => {
   try {
     let index;
     if (uuid) {
-      index = await locateMessage(row.file, uuid);
+      index = await locateMessage(row.file, uuid, row.source);
     } else if (toolUseId) {
-      index = await locateToolUse(row.file, toolUseId);
+      index = await locateToolUse(row.file, toolUseId, row.source);
     } else {
-      index = await locateAgentByName(row.file, agentName, nth);
+      index = await locateAgentByName(row.file, agentName, nth, row.source);
     }
     if (index < 0) return res.status(404).json({ error: 'Message not found' });
     res.json({ index });
@@ -143,7 +144,7 @@ router.get('/api/session/:id/boundaries', async (req, res) => {
   if (!row) return res.status(404).json({ error: 'session not found' });
   try {
     const file = req.query.reconstructed === '1' ? await ensureReconstructed(row) : row.file;
-    res.json(await listBoundariesCached(file));
+    res.json(await listBoundariesCached(file, row.source));
   } catch (err) {
     reconstructErrorResponse(res, err, row.id, 'boundaries');
   }
@@ -168,7 +169,7 @@ router.get('/api/session/:id/stats', async (req, res) => {
   const row = repo.getSession(req.params.id);
   if (!row) return res.status(404).json({ error: 'session not found' });
   try {
-    res.json(await getSessionStatsCached(row.file));
+    res.json(await getSessionStatsCached(row.file, row.source));
   } catch (err) {
     log.error(`stats ${row.id}: ${err.message}`);
     res.status(500).json({ error: 'Failed to compute statistics' });

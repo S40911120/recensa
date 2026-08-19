@@ -5,9 +5,10 @@
 // - idempotent re-read: on truncation/full re-read, clear the session's FTS and counts first so nothing is double-counted
 const fs = require('node:fs');
 const path = require('node:path');
-const { FTS_TEXT_MAX, PROJECTS_DIR, TITLE_MAX } = require('../config');
+const { CODEX_SESSIONS_DIR, FTS_TEXT_MAX, PROJECTS_DIR, TITLE_MAX } = require('../config');
 const { open } = require('../storage/db');
 const { forIndex } = require('../parsing/parse');
+const codexParse = require('../parsing/parseCodex');
 const log = require('../log').scope('indexer');
 
 const CHUNK_BYTES = 4 * 1024 * 1024;
@@ -22,6 +23,7 @@ function mainTarget(projName, projDir, fileName) {
     project: projName,
     parentSession: null,
     metaFile: null,
+    source: 'claude',
   };
 }
 
@@ -33,7 +35,52 @@ function subagentTarget(projName, subDir, parentId, fileName) {
     project: projName,
     parentSession: parentId,
     metaFile: path.join(subDir, fileName.replace(/\.jsonl$/, '.meta.json')),
+    source: 'claude',
   };
+}
+
+/** Codex has no directory-per-project layout (sessions live under sessions/YYYY/MM/DD/rollout-*.jsonl) -> the
+ *  project is derived from the session's own cwd (read during aggregation) rather than known up front; persist()
+ *  fills it in from agg.cwd. */
+function codexTarget(dir, fileName) {
+  const m = /-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.jsonl$/i.exec(fileName);
+  return {
+    file: path.join(dir, fileName),
+    sessionId: m ? m[1] : fileName.replace(/\.jsonl$/, ''),
+    kind: 'main',
+    project: null,
+    parentSession: null,
+    metaFile: null,
+    source: 'codex',
+  };
+}
+
+/** Codex's fixed sessions/YYYY/MM/DD/*.jsonl layout -> a bounded 3-level walk (not a generic recursive one).
+ *  The whole tree is optional (Codex may not be installed) -> any readdir failure just yields no targets. */
+function collectCodexTargets(out) {
+  let years;
+  try { years = fs.readdirSync(CODEX_SESSIONS_DIR, { withFileTypes: true }); } catch { return; }
+  for (const y of years) {
+    if (!y.isDirectory()) continue;
+    const yDir = path.join(CODEX_SESSIONS_DIR, y.name);
+    let months;
+    try { months = fs.readdirSync(yDir, { withFileTypes: true }); } catch { continue; }
+    for (const mo of months) {
+      if (!mo.isDirectory()) continue;
+      const moDir = path.join(yDir, mo.name);
+      let days;
+      try { days = fs.readdirSync(moDir, { withFileTypes: true }); } catch { continue; }
+      for (const d of days) {
+        if (!d.isDirectory()) continue;
+        const dDir = path.join(moDir, d.name);
+        let files;
+        try { files = fs.readdirSync(dDir); } catch { continue; }
+        for (const f of files) {
+          if (f.endsWith('.jsonl')) out.push(codexTarget(dDir, f));
+        }
+      }
+    }
+  }
 }
 
 function collectSubagentTargets(projName, projDir, dirName, out) {
@@ -79,6 +126,7 @@ function listJsonlTargets() {
     throw err;
   }
   for (const proj of projects) collectProjectTargets(proj.name, path.join(PROJECTS_DIR, proj.name), targets);
+  collectCodexTargets(targets);
   return targets;
 }
 
@@ -263,15 +311,85 @@ function aggregateLine(agg, sessionId, line) {
   applyMessageRecord(agg, sessionId, idx);
 }
 
+/** Codex counterpart of aggregateLine: session_meta/turn_context/token_count carry session-level metadata (no
+ *  message of their own); response_item is run through parseCodex.toMessage and folded into the same agg shape
+ *  applyMessageRecord builds, so persist()/the sessions table stay source-agnostic. */
+function aggregateLineCodex(agg, sessionId, line) {
+  let rec;
+  try {
+    rec = JSON.parse(line);
+  } catch {
+    return;
+  }
+  if (rec.type === 'session_meta') {
+    const p = rec.payload || {};
+    if (!agg.cwd && typeof p.cwd === 'string') agg.cwd = p.cwd;
+    if (p.git?.branch) agg.gitBranch = p.git.branch;
+    return;
+  }
+  if (rec.type === 'turn_context') {
+    const model = rec.payload?.model;
+    if (typeof model === 'string') { agg.model = model; agg.models.add(model); }
+    return;
+  }
+  if (rec.type === 'event_msg') {
+    // Codex reports a running session-cumulative total here (not a per-turn delta) -> overwrite, never
+    // accumulate. Safe only because ingestFile forces a full re-read for Codex targets (see isCodex below).
+    if (rec.payload?.type === 'token_count') {
+      const usage = rec.payload.info?.total_token_usage;
+      if (usage) {
+        agg.tokensOut = usage.output_tokens || 0;
+        agg.tokensIn = usage.input_tokens || 0;
+        agg.cacheRead = usage.cached_input_tokens || 0;
+      }
+    }
+    return;
+  }
+  if (rec.type !== 'response_item') return;
+  let msg;
+  try {
+    msg = codexParse.toMessage(rec);
+  } catch (err) {
+    log.error(`skip malformed codex record in ${sessionId}: ${err.message}`);
+    return;
+  }
+  if (!msg) return;
+  agg.msgCount++;
+  if (msg.ts) {
+    if (!agg.firstTs) agg.firstTs = msg.ts;
+    agg.lastTs = msg.ts;
+  }
+  let text = '';
+  for (const b of msg.blocks) {
+    if (b.kind === 'tool_use') agg.toolCalls++;
+    if (b.kind === 'text' || b.kind === 'thinking' || b.kind === 'tool_result') text += (text ? '\n' : '') + b.text;
+  }
+  if (msg.origin === 'human') {
+    agg.userPrompts++;
+    if (text) setTitle(agg, text.replace(/\s+/g, ' '), 1);
+  }
+  if (text) {
+    agg.ftsRows.push({ sessionId, uuid: msg.uuid || '', ts: msg.ts || '', mtype: msg.type, text: text.slice(0, FTS_TEXT_MAX) });
+  }
+}
+
 // ---------- writes ----------
+
+/** Same convention Claude Code itself uses to name its project directories from a cwd (mirrored here so a
+ *  Codex session's derived project label decodes identically in the frontend's project dropdown). */
+function encodeProjectFromCwd(cwd) {
+  if (!cwd) return null;
+  return cwd.replaceAll('\\', '/').replace(':', '-').replaceAll('/', '-');
+}
 
 function persist(db, stmts, t, st, newOffset, agg, isIncremental) {
   const agentMeta = t.kind === 'subagent' ? readAgentMeta(t.metaFile) : {};
   const row = {
     id: t.sessionId,
     kind: t.kind,
-    project: t.project,
+    project: t.project || encodeProjectFromCwd(agg.cwd) || '(unknown)',
     cwd: agg.cwd,
+    source: t.source || 'claude',
     file: t.file,
     parent_session: t.parentSession,
     agent_name: agentMeta.name || null,
@@ -329,18 +447,25 @@ function ingestFile(db, t, stmts) {
   } catch {
     return false;
   }
+  const isCodex = t.source === 'codex';
   const known = stmts.getFile.get(t.file);
   let offset = known ? known.offset : 0;
   if (known && st.size < known.offset) offset = 0; // file was truncated -> full re-read
+  // notes: Codex sessions run to hundreds of lines (not Claude's 100k+), and Codex's token_count events report a
+  // running session-cumulative total rather than a per-turn delta -- an incremental += on top of that would double
+  // count. Simplest correct fix at this scale: always re-read Codex files whole instead of reconciling deltas.
+  // Upgrade path: only if a single Codex session ever grows large enough for the full re-read to show up in profiling.
+  if (isCodex) offset = 0;
   if (known && st.size === known.offset && st.mtimeMs <= known.mtime) return false;
 
   const agg = newAggregate();
-  const newOffset = readLines(t.file, offset, st.size, (line) => aggregateLine(agg, t.sessionId, line));
+  const aggregator = isCodex ? aggregateLineCodex : aggregateLine;
+  const newOffset = readLines(t.file, offset, st.size, (line) => aggregator(agg, t.sessionId, line));
   if (newOffset === offset && known) {
     stmts.touchFile.run(st.size, st.mtimeMs, t.file);
     return false;
   }
-  persist(db, stmts, t, st, newOffset, agg, Boolean(known) && offset > 0);
+  persist(db, stmts, t, st, newOffset, agg, isCodex ? false : Boolean(known) && offset > 0);
   return true;
 }
 
@@ -364,12 +489,13 @@ function removeByPath(filePath) {
 }
 
 const SESSION_COLUMNS = `(id, kind, project, cwd, file, parent_session, agent_name, agent_type, agent_desc,
-   tool_use_id, task_kind, team_name, model, agent_model, spawn_depth, custom_agent_type, title, title_rank, first_ts, last_ts, msg_count, user_prompts, tool_calls, tokens_out, tokens_in, cache_read, cache_creation, git_branch, forked_from, compact_count, model_names, size)
+   tool_use_id, task_kind, team_name, model, agent_model, spawn_depth, custom_agent_type, title, title_rank, first_ts, last_ts, msg_count, user_prompts, tool_calls, tokens_out, tokens_in, cache_read, cache_creation, git_branch, forked_from, compact_count, model_names, size, source)
   VALUES (@id, @kind, @project, @cwd, @file, @parent_session, @agent_name, @agent_type, @agent_desc,
-   @tool_use_id, @task_kind, @team_name, @model, @agent_model, @spawn_depth, @custom_agent_type, @title, @title_rank, @first_ts, @last_ts, @msg_count, @user_prompts, @tool_calls, @tokens_out, @tokens_in, @cache_read, @cache_creation, @git_branch, @forked_from, @compact_count, @model_names, @size)`;
+   @tool_use_id, @task_kind, @team_name, @model, @agent_model, @spawn_depth, @custom_agent_type, @title, @title_rank, @first_ts, @last_ts, @msg_count, @user_prompts, @tool_calls, @tokens_out, @tokens_in, @cache_read, @cache_creation, @git_branch, @forked_from, @compact_count, @model_names, @size, @source)`;
 
 const SESSION_META_UPDATES = `
   cwd = COALESCE(sessions.cwd, excluded.cwd),
+  source = COALESCE(excluded.source, sessions.source),
   model = COALESCE(excluded.model, sessions.model),
   agent_model = COALESCE(excluded.agent_model, sessions.agent_model),
   spawn_depth = COALESCE(excluded.spawn_depth, sessions.spawn_depth),

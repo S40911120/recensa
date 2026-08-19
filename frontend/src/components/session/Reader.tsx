@@ -17,6 +17,7 @@ import { cn } from '../../lib/utils';
 import { useBoundaries } from '../../hooks/useBoundaries';
 import { LIVE_MODE, useMessages, type ReaderMode, type ReaderSnapshot } from '../../hooks/useMessages';
 import { useReadingPosition } from '../../hooks/useReadingPosition';
+import { getSettings } from '../../services/api';
 import type { Message, SessionDetail } from '../../types';
 import { Button } from '../ui/button';
 import { Dialog, DialogContent } from '../ui/dialog';
@@ -157,16 +158,34 @@ export function Reader({ detail, trail, mode = LIVE_MODE, jumpRequest, onOpenSub
     // End-anchor: when prepending older messages, use the end as a stable anchor and auto-preserve position (replaces manual scrollTop delta compensation;
     //   the recommended chat pattern; core ≥ 3.16.1 fixed the prepend one-frame jump)
     anchorTo: 'end',
-    // On new-message append, follow to the bottom only if the user was already at the bottom (live tail)
-    followOnAppend: true,
+    // On new-message append, follow to the bottom only if the user was already at the bottom (live tail).
+    // notes: virtual-core's own followOnAppend check treats the very first population (prevCount === 0,
+    // going from [] to the initial loaded chunk) as eligible to follow regardless of scroll position --
+    // unconditionally scrolling a fresh "start at the top" open (Settings default) straight to the bottom.
+    // didInitialScrollRef is false during that first render (it only flips true inside the scroll-decision
+    // effect below, which runs after commit) -- gating on it here skips that one render, so the explicit
+    // scrollToEnd() in that same effect is what actually decides the initial position instead.
+    followOnAppend: didInitialScrollRef.current,
   });
   const virtualItems = virtualizer.getVirtualItems();
 
-  const scrollToEnd = useCallback(() => {
-    virtualizer.scrollToEnd();
+  // Where to land when there's no cached scroll position: ask the server directly (not a startIndex proxy).
+  // notes: startIndex > 0 used to stand in for "useMessages loaded a tail slice, so we're in jump-to-latest
+  // mode", but a short session (< CHUNK_SIZE messages) collapses tail-mode's startIndex to 0 too -- readTail
+  // computes from = max(0, total - limit), which is 0 whenever total <= limit -- so that proxy silently
+  // stayed at the top for every short session even with the setting on. Asking the setting directly removes
+  // the false assumption instead of special-casing session length.
+  const applyScrollPreference = useCallback(() => {
+    getSettings()
+      .then((s) => {
+        if (s.scrollToLatest === '1') virtualizer.scrollToEnd();
+        else virtualizer.scrollToOffset(0, { align: 'start' });
+      })
+      .catch(() => {});
   }, [virtualizer]);
 
-  // Restore scroll position when returning to a session (no reload, no jump to bottom)
+  // Restore scroll position when returning to a session (no reload). A first-time open with no cached
+  // position asks Settings where to land.
   const restoreRef = useRef(false);
   useEffect(() => {
     if (state === 'ready' && !didInitialScrollRef.current && messages.length > 0) {
@@ -177,10 +196,24 @@ export function Reader({ detail, trail, mode = LIVE_MODE, jumpRequest, onOpenSub
         restoreRef.current = true;
         virtualizer.scrollToOffset(cached, { align: 'start' });
       } else if (mode.type !== 'segment') {
-        scrollToEnd();
+        applyScrollPreference();
       }
     }
-  }, [state, messages.length, scrollToEnd, mode.type, detail.id, scrollCache, snapshotCache, virtualizer]);
+  }, [state, messages.length, mode.type, detail.id, scrollCache, snapshotCache, virtualizer, applyScrollPreference]);
+
+  // Clicking a session you already have open doesn't change the URL hash, so this component never
+  // remounts and the effect above never re-runs -- without this, the Settings "jump to latest" toggle
+  // would silently do nothing for a session you're already viewing (most relevant for an actively-growing
+  // one you've scrolled away from). SessionList fires this event specifically for that case.
+  useEffect(() => {
+    if (mode.type === 'segment') return;
+    function onReopen(e: Event) {
+      if ((e as CustomEvent<string>).detail !== detail.id) return;
+      applyScrollPreference();
+    }
+    globalThis.addEventListener('recensa:reopen-session', onReopen);
+    return () => globalThis.removeEventListener('recensa:reopen-session', onReopen);
+  }, [detail.id, mode.type, applyScrollPreference]);
 
   // Save scroll position when leaving a session
   useEffect(() => () => {
@@ -190,11 +223,21 @@ export function Reader({ detail, trail, mode = LIVE_MODE, jumpRequest, onOpenSub
     }
   }, [detail.id, scrollCache, virtualizer]);
 
-  // Scrolled to the loaded end → keep loading (downward paging beyond live tail)
-  const lastRenderedIndex = virtualItems.at(-1)?.index ?? -1;
+  // Scrolled to the loaded end → keep loading (downward paging beyond live tail). Deliberately NOT
+  // virtualItems.at(-1) or a per-item vi.start comparison: OVERSCAN_ROWS (150) covers a whole load chunk
+  // and anchorTo:'end' anchors item offsets from the bottom, so both read as "at the loaded end" the
+  // instant the first chunk mounts -- before the user has scrolled at all -- firing an eager auto-load
+  // chain (and, via followOnAppend, dragging the view down toward the tail) for a session opened at the
+  // top (index 0, the "start reading" default). getTotalSize() is the one measurement anchorTo doesn't
+  // distort, so gate on genuinely being within a few px of the bottom of the loaded content, the same way
+  // the reading-position indicator's atBottom already does below.
+  const scrollOffset = virtualizer.scrollOffset ?? 0;
+  const clientH = parentRef.current?.clientHeight ?? 0;
+  const totalSize = virtualizer.getTotalSize();
+  const atLoadedBottom = totalSize > 0 && scrollOffset + clientH >= totalSize - 4;
   useEffect(() => {
-    if (didInitialScrollRef.current && lastRenderedIndex >= messages.length - 1 && hasMore) void loadMore();
-  }, [lastRenderedIndex, messages.length, hasMore, loadMore]);
+    if (didInitialScrollRef.current && atLoadedBottom && hasMore) { void loadMore(); }
+  }, [atLoadedBottom, hasMore, loadMore]);
 
   // Load earlier: anchorTo:'end' auto-preserves position, so just prepend the data — no scrollTop compensation needed
   async function handleLoadOlder() {
@@ -262,12 +305,9 @@ export function Reader({ detail, trail, mode = LIVE_MODE, jumpRequest, onOpenSub
 
   // Reading-position indicator (live mode, updates on scroll): absolute position of the top visible message / total.
   // Use scrollOffset to find the true top-of-viewport item (excluding the overscan top edge, otherwise it's off by one overscan amount).
-  const scrollOffset = virtualizer.scrollOffset ?? 0;
   // Fallback to the last item (not the overscan top item), otherwise under extreme scrolling viewportTopAbs would be too small and point the wrong way
   const topVisible = virtualItems.find((vi) => vi.start + vi.size > scrollOffset) ?? virtualItems.at(-1);
   // Special-case 0%/100% at the very top/bottom (the top-item semantics only reach ~95% at the very bottom, but the "reading position" label should reach 100% at the end)
-  const clientH = parentRef.current?.clientHeight ?? 0;
-  const totalSize = virtualizer.getTotalSize();
   const { positionPct, segmentPct } = useReadingPosition({
     isLive: mode.type === 'live',
     total,
@@ -275,7 +315,7 @@ export function Reader({ detail, trail, mode = LIVE_MODE, jumpRequest, onOpenSub
     loadedCount: messages.length,
     topVisibleRelIndex: topVisible?.index ?? 0,
     atTop: scrollOffset <= 2,
-    atBottom: totalSize > 0 && scrollOffset + clientH >= totalSize - 4,
+    atBottom: atLoadedBottom,
     boundaries,
   });
 

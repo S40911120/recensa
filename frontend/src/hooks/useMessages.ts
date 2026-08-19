@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { errMessage } from '../lib/utils';
-import { getMessages } from '../services/api';
+import { getMessages, getSettings } from '../services/api';
 import type { Message } from '../types';
 
 const CHUNK_SIZE = 150;
@@ -109,6 +109,8 @@ export function useMessages(
   startRef.current = startIndex;
   const stateRef = useRef<LoadState>('loading');
   stateRef.current = state;
+  const hasMoreRef = useRef(false);
+  hasMoreRef.current = hasMore;
   const inFlightRef = useRef(false);
   // After a full load, total is exact; live-tail appends keep it exact incrementally (otherwise the backend's approximation would overwrite it)
   const exactTotalRef = useRef(false);
@@ -164,8 +166,18 @@ export function useMessages(
     const controller = new AbortController();
     setState('loading');
     setMessages([]);
-    loadAt(rangeStart ?? 'tail', controller.signal)
-      .then(() => setState('ready'))
+    // Default: start reading from the beginning (index 0), not the tail. The "jump straight to the latest
+    // message" behavior is opt-in via Settings; read straight from the server (not a localStorage cache) so
+    // the decision can never go stale relative to what the Settings dialog actually shows. Segment mode
+    // always uses its own explicit range and skips this lookup entirely.
+    (rangeStart !== undefined
+      ? Promise.resolve(rangeStart)
+      : getSettings()
+          .then((s) => (s.scrollToLatest === '1' ? 'tail' : 0))
+          .catch(() => 0)
+    )
+      .then((initialFrom) => (controller.signal.aborted ? undefined : loadAt(initialFrom, controller.signal)))
+      .then(() => { if (!controller.signal.aborted) setState('ready'); })
       .catch((err: unknown) => {
         if (controller.signal.aborted) return;
         setError(errMessage(err));
@@ -339,13 +351,18 @@ export function useMessages(
         setIsLive(true);
         // Tell the backend "I'm viewing this session" → pin it into the watched set, so however long it idles it keeps 700ms live-tail (not evicted by the 20s hot window)
         try { ws?.send(JSON.stringify({ type: 'watch', sessionId })); } catch { /* ignore */ }
-        if (stateRef.current === 'ready') appendFromEnd().catch(noop);
+        // Only when already caught up to the loaded window's end (hasMore false): appendFromEnd fetches
+        // whatever comes right after that window, which is only genuinely "new" content once there's no
+        // known-unloaded gap left. A session opened at the top of a long history has hasMore=true for a
+        // while (by design, per the Settings "jump to latest" default) -- firing this unconditionally on
+        // every WS connect would silently pull in the next historical chunk during that time, not new activity.
+        if (stateRef.current === 'ready' && !hasMoreRef.current) appendFromEnd().catch(noop);
       };
       ws.onmessage = (ev: MessageEvent<string>) => {
         if (stateRef.current !== 'ready') return;
         try {
           const payload = JSON.parse(ev.data) as { type: string; sessionId: string };
-          if (payload.type === 'session_updated' && payload.sessionId === sessionId) {
+          if (payload.type === 'session_updated' && payload.sessionId === sessionId && !hasMoreRef.current) {
             appendFromEnd().catch(noop);
           }
         } catch {

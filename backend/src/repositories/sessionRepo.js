@@ -94,9 +94,13 @@ function ftsQuery(q) {
   return `"${q.replaceAll('"', '""')}"`;
 }
 
-function listSessions({ project, q, sid, model, since, until, pinnedOnly, tag, limit, offset }) {
+function listSessions({ project, q, sid, model, since, until, pinnedOnly, tag, source, limit, offset }) {
   const params = [];
   let where = "s.kind = 'main'";
+  if (source) {
+    where += ' AND s.source = ?';
+    params.push(source);
+  }
   if (project) {
     where += ' AND s.project = ?';
     params.push(project);
@@ -149,7 +153,14 @@ function listSessions({ project, q, sid, model, since, until, pinnedOnly, tag, l
   return rows.map((r) => ({ ...r, tags: JSON.parse(r.tags) }));
 }
 
-function listProjects() {
+function listProjects(source) {
+  if (source) {
+    return db()
+      .prepare(
+        "SELECT project, COUNT(*) AS n, MAX(last_ts) AS last_ts FROM sessions WHERE kind='main' AND source = ? GROUP BY project ORDER BY last_ts DESC"
+      )
+      .all(source);
+  }
   return db()
     .prepare(
       "SELECT project, COUNT(*) AS n, MAX(last_ts) AS last_ts FROM sessions WHERE kind='main' GROUP BY project ORDER BY last_ts DESC"
@@ -157,15 +168,22 @@ function listProjects() {
     .all();
 }
 
-function searchMessages(q, limit) {
+function searchMessages(q, limit, source) {
+  const params = [ftsQuery(q)];
+  let where = 'messages_fts MATCH ?';
+  if (source) {
+    where += ' AND s.source = ?';
+    params.push(source);
+  }
+  params.push(limit);
   return db()
     .prepare(
       `SELECT m.session_id, m.uuid, m.ts, m.mtype, snippet(messages_fts, 4, '⟦', '⟧', '…', 24) AS snip,
               s.title, s.project, s.kind, s.parent_session
        FROM messages_fts m JOIN sessions s ON s.id = m.session_id
-       WHERE messages_fts MATCH ? ORDER BY m.ts DESC LIMIT ?`
+       WHERE ${where} ORDER BY m.ts DESC LIMIT ?`
     )
-    .all(ftsQuery(q), limit);
+    .all(...params);
 }
 
 function upsertFlags(sessionId, { pinned, tags, custom_title, note }) {
@@ -263,14 +281,17 @@ function deleteSession(id) {
   // if the index cleanup fails after the files are gone, the next tick's deletion reconciliation compensates by clearing the index (no ghosts left behind).
   // Guard the recursive+force delete before touching anything: if the indexed row's file/id would resolve outside the
   // projects root, refuse and delete nothing (fail-safe -- a corrupt/hostile index row must never wipe outside data).
-  let subagentDir;
-  try {
-    subagentDir = resolveSubagentDir(row.file, id);
-  } catch (err) {
-    return { ok: false, code: 400, error: `Refusing to delete this session: ${err.message}` };
+  // Codex sessions have no subagents/ directory (and live outside PROJECTS_DIR entirely) -> nothing to resolve there.
+  let subagentDir = null;
+  if (row.source !== 'codex') {
+    try {
+      subagentDir = resolveSubagentDir(row.file, id);
+    } catch (err) {
+      return { ok: false, code: 400, error: `Refusing to delete this session: ${err.message}` };
+    }
   }
   fs.rmSync(row.file, { force: true });
-  fs.rmSync(subagentDir, { recursive: true, force: true });
+  if (subagentDir) fs.rmSync(subagentDir, { recursive: true, force: true });
   // flagsdb.session_flags cleanup is left to the main thread (the sole writer of flagsdb; a single autocommit statement does not lock viewer.db main)
   d.prepare('DELETE FROM flagsdb.session_flags WHERE session_id = ?').run(id);
   // viewer.db index cleanup (fts/files/sessions/spawns) is handed to the index worker (the sole writer of viewer.db) -> eliminating the delete-vs-reconcile double-write race.

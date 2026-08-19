@@ -9,7 +9,7 @@ import { IndexBanner } from './components/IndexBanner';
 import { Settings } from './components/Settings';
 import { Button } from './components/ui/button';
 import { MessageSkeleton, RecensaIcon } from './components/ui/loading';
-import { locateSpawnCall, type SpawnLocateTarget } from './services/api';
+import { listSessions, locateSpawnCall, type SpawnLocateTarget } from './services/api';
 import { useBoundaries } from './hooks/useBoundaries';
 import { useMediaQuery } from './hooks/useMediaQuery';
 import { LIVE_MODE, type ReaderMode, type ReaderSnapshot } from './hooks/useMessages';
@@ -106,6 +106,23 @@ export function App() {
   const [route, setRoute] = useState<Route>(parseRoute);
   const indexStatus = useIndexStatus(); // app-level index status (top progress bar + WS)
   const [filters, setFilters] = useState<SessionFilters>(DEFAULT_FILTERS);
+  // Startup source detection: the default is 'claude', but a fresh Codex-only machine (no Claude Code
+  // history at all) would otherwise open on a permanently empty list. Check once on mount and fall back
+  // to Codex only if Claude Code truly has zero sessions and Codex has at least one; a user who has
+  // already switched sources by the time this resolves is left alone (checked via the functional update).
+  useEffect(() => {
+    let cancelled = false;
+    listSessions({ source: 'claude', limit: 1 })
+      .then((rows) => {
+        if (cancelled || rows.length > 0) return;
+        return listSessions({ source: 'codex', limit: 1 }).then((codexRows) => {
+          if (cancelled || codexRows.length === 0) return;
+          setFilters((f) => (f.source === 'claude' ? { ...f, source: 'codex' } : f));
+        });
+      })
+      .catch(() => { /* on failure, keep the static 'claude' default */ });
+    return () => { cancelled = true; };
+  }, []);
   const [isInfoOpen, setIsInfoOpen] = useState(() => localStorage.getItem('recensa:info-panel') !== '0');
   const [listRefreshKey, setListRefreshKey] = useState(0);
   // The jump request carries a sessionId: applied only when the target session is the one currently open (avoids a stale mis-jump, replacing a clearing effect)

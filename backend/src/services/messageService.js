@@ -1,9 +1,16 @@
 'use strict';
 // Message read layer: incremental byte-cursor streaming (resume from a checkpoint instead of re-scanning the whole file) + subagent deep-link resolution
 const fs = require('node:fs');
-const { toMessage, countsAsMessage } = require('../parsing/parse');
+const claudeParse = require('../parsing/parse');
+const codexParse = require('../parsing/parseCodex');
 const { listSubagents } = require('../repositories/sessionRepo');
 const log = require('../log').scope('stream');
+
+/** Picks the record -> viewer-message parser by session source ('claude' | 'codex'); every read path in this
+ *  file threads a `source` parameter down to this single dispatch point. */
+function parserFor(source) {
+  return source === 'codex' ? codexParse : claudeParse;
+}
 
 // ---------- byte-cursor cache ----------
 // Hot path: live tail reads with a large `from` on every session_updated, and tail opens first -- originally both
@@ -48,7 +55,8 @@ function checkpointBefore(cursor, targetIndex) {
  *  with the cheap countsAsMessage predicate and the expensive toMessage()/onMessage() are skipped. The index counter is
  *  advanced identically either way, so msg_count parity is preserved (proven by parse.test.js countsAsMessage <=> toMessage).
  */
-function streamMessagesFrom(file, startByte, startIndex, cursor, onMessage, skipBuild) {
+function streamMessagesFrom(file, startByte, startIndex, cursor, onMessage, skipBuild, source = 'claude') {
+  const { toMessage, countsAsMessage } = parserFor(source);
   return new Promise((resolve, reject) => {
     if (startByte >= cursor.size) return resolve();
     const stream = fs.createReadStream(file, { start: startByte, end: cursor.size - 1 });
@@ -171,18 +179,18 @@ function streamMessagesFrom(file, startByte, startIndex, cursor, onMessage, skip
 }
 
 /** Full-file stream (used by stats/skills/boundaries/locate); builds checkpoints along the way to benefit later pagination */
-function streamMessages(file, onMessage) {
+function streamMessages(file, onMessage, source = 'claude') {
   let st;
   try {
     st = fs.statSync(file);
   } catch (err) {
     return Promise.reject(err);
   }
-  return streamMessagesFrom(file, 0, 0, getCursor(file, st.size), onMessage);
+  return streamMessagesFrom(file, 0, 0, getCursor(file, st.size), onMessage, undefined, source);
 }
 
 /** Stream the jsonl messages in [from, from+limit); resumes from the nearest checkpoint and reads one extra to determine hasMore */
-async function readMessages(file, from, limit) {
+async function readMessages(file, from, limit, source = 'claude') {
   const st = fs.statSync(file);
   const cursor = getCursor(file, st.size);
   const cp = checkpointBefore(cursor, from);
@@ -196,7 +204,7 @@ async function readMessages(file, from, limit) {
     }
     messages.push(msg);
     return true;
-  }, (index) => index < from); // skip building the discarded [cp.index, from) prefix
+  }, (index) => index < from, source); // skip building the discarded [cp.index, from) prefix
   return { messages, hasMore };
 }
 
@@ -235,12 +243,12 @@ function resolveAgentLinks(sessionRow, messages) {
 
 /** Tail read, two passes: first scan from the high-water mark to EOF to get the exact total (the first pass is a full
  *  scan that builds checkpoints, later passes only scan appended bytes), then collect the last `limit` messages from the nearest checkpoint. */
-async function readTail(file, limit) {
+async function readTail(file, limit, source = 'claude') {
   const st = fs.statSync(file);
   const cursor = getCursor(file, st.size);
   // Pass 1: advance the high-water mark to EOF -> cursor.lastIndex is the exact total. Only the count matters here
   // (the callback ignores the message), so skip building every message and just count with countsAsMessage.
-  await streamMessagesFrom(file, cursor.lastByte, cursor.lastIndex, cursor, () => true, () => true);
+  await streamMessagesFrom(file, cursor.lastByte, cursor.lastIndex, cursor, () => true, () => true, source);
   const total = cursor.lastIndex;
   const from = Math.max(0, total - limit);
   const cp = checkpointBefore(cursor, from);
@@ -249,12 +257,13 @@ async function readTail(file, limit) {
     if (index < from) return true;
     window.push(msg);
     return window.length < total - from; // stop once the window is full
-  }, (index) => index < from); // skip building the [cp.index, from) prefix before the tail window
+  }, (index) => index < from, source); // skip building the [cp.index, from) prefix before the tail window
   return { messages: window, startIndex: from };
 }
 
-/** Collect the skills activated in the session (the input.skill of each Skill tool_use), aggregating counts and first-seen time */
-async function listSkills(file) {
+/** Collect the skills activated in the session (the input.skill of each Skill tool_use), aggregating counts and first-seen time.
+ *  Codex sessions never emit a 'Skill' tool_use (different tool names entirely) -> naturally returns empty, no special-casing needed. */
+async function listSkills(file, source = 'claude') {
   const agg = new Map(); // name → {count, firstTs}
   await streamMessages(file, (msg) => {
     for (const b of msg.blocks) {
@@ -266,14 +275,14 @@ async function listSkills(file) {
       else agg.set(name, { count: 1, firstTs: msg.ts });
     }
     return true;
-  });
+  }, source);
   return [...agg.entries()]
     .map(([name, v]) => ({ name, count: v.count, firstTs: v.firstTs }))
     .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
 }
 
 /** Scan the file for the position of the first message matching the predicate (stops on hit); returns -1 when not found (a pure not-found sentinel -- real errors propagate via streamMessages reject) */
-async function locateBy(file, predicate) {
+async function locateBy(file, predicate, source = 'claude') {
   let found = -1;
   await streamMessages(file, (msg, index) => {
     if (predicate(msg)) {
@@ -281,7 +290,7 @@ async function locateBy(file, predicate) {
       return false; // stop once found
     }
     return true;
-  });
+  }, source);
   return found;
 }
 
@@ -308,18 +317,18 @@ function locateCached(file, target, scan) {
 }
 
 /** Locate a message uuid's position within the file (used to jump to a search hit); returns -1 when not found */
-const locateMessage = (file, targetUuid) =>
-  locateCached(file, `u:${targetUuid}`, () => locateBy(file, (msg) => msg.uuid === targetUuid));
+const locateMessage = (file, targetUuid, source = 'claude') =>
+  locateCached(file, `u:${targetUuid}`, () => locateBy(file, (msg) => msg.uuid === targetUuid, source));
 
 /** Locate the position of the message that dispatched a given Agent/Task (used to jump to a subagent's call site); returns -1 when not found */
-const locateToolUse = (file, targetToolUseId) =>
+const locateToolUse = (file, targetToolUseId, source = 'claude') =>
   locateCached(file, `t:${targetToolUseId}`, () =>
-    locateBy(file, (msg) => msg.blocks.some((b) => b.kind === 'tool_use' && b.id === targetToolUseId)));
+    locateBy(file, (msg) => msg.blocks.some((b) => b.kind === 'tool_use' && b.id === targetToolUseId), source));
 
 /** Name-based fallback locate: for subagents/teammates whose meta.json has no toolUseId (roughly 1 in 5 in practice),
  *  find the nth Agent/Task tool_use whose input.name matches -- positional pairing, so
  *  repeated dispatches of the same name do not all jump to the first (jumping to the wrong call site is more misleading than not jumping). */
-function locateAgentByName(file, agentName, nth = 1) {
+function locateAgentByName(file, agentName, nth = 1, source = 'claude') {
   return locateCached(file, `a:${agentName}:${nth}`, () => {
     let seen = 0;
     return locateBy(file, (msg) => {
@@ -330,32 +339,33 @@ function locateAgentByName(file, agentName, nth = 1) {
           b.input && b.input.name === agentName
       );
       return hit && ++seen === nth;
-    });
+    }, source);
   });
 }
 
 /** Collect all compaction boundary nodes (message position + timestamp) -- lets a multiply-compacted session offer jump points */
-async function listBoundaries(file) {
+async function listBoundaries(file, source = 'claude') {
   const boundaries = [];
   await streamMessages(file, (msg, index) => {
     if (msg.origin === 'boundary') boundaries.push({ index, ts: msg.ts });
     return true;
-  });
+  }, source);
   return boundaries;
 }
 
 /** One-stop pagination + deep-link resolution. `from` may be a number or 'tail' (used to land on the latest message by default). */
 async function getMessagesPage(sessionRow, from, limit) {
+  const source = sessionRow.source || 'claude';
   let messages;
   let actualFrom;
   let hasMore;
   if (from === 'tail') {
-    const tail = await readTail(sessionRow.file, limit);
+    const tail = await readTail(sessionRow.file, limit, source);
     messages = tail.messages;
     actualFrom = tail.startIndex;
     hasMore = false; // already at EOF; new messages afterward are appended by live tail
   } else {
-    const r = await readMessages(sessionRow.file, from, limit);
+    const r = await readMessages(sessionRow.file, from, limit, source);
     messages = r.messages;
     actualFrom = from;
     hasMore = r.hasMore;
@@ -433,7 +443,7 @@ function accumulateStats(msg, acc) {
   }
 }
 
-async function getSessionStats(file) {
+async function getSessionStats(file, source = 'claude') {
   const acc = {
     toolCounts: new Map(),
     modelCounts: new Map(), // model → count (tracks switching between models)
@@ -446,7 +456,7 @@ async function getSessionStats(file) {
   await streamMessages(file, (msg) => {
     accumulateStats(msg, acc);
     return true;
-  });
+  }, source);
 
   const tools = [...acc.toolCounts.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
   const files = [...acc.fileOps.entries()].map(([path, v]) => ({
@@ -497,10 +507,10 @@ async function cachedByFileStat(cache, file, scan) {
   return data;
 }
 
-const getSessionStatsCached = (file) => cachedByFileStat(statsCache, file, getSessionStats);
+const getSessionStatsCached = (file, source = 'claude') => cachedByFileStat(statsCache, file, (f) => getSessionStats(f, source));
 // listBoundaries/listSkills also do a full-file scan on every call; the reader hits them repeatedly (open a
 // multiply-compacted session, jump around) so cache them with the same (size, mtime) invalidation as stats.
-const listBoundariesCached = (file) => cachedByFileStat(boundariesCache, file, listBoundaries);
-const listSkillsCached = (file) => cachedByFileStat(skillsCache, file, listSkills);
+const listBoundariesCached = (file, source = 'claude') => cachedByFileStat(boundariesCache, file, (f) => listBoundaries(f, source));
+const listSkillsCached = (file, source = 'claude') => cachedByFileStat(skillsCache, file, (f) => listSkills(f, source));
 
 module.exports = { getMessagesPage, listBoundaries, listBoundariesCached, listSkills, listSkillsCached, locateAgentByName, locateMessage, locateToolUse, readMessages, readTail, resolveAgentLinks, getSessionStats, getSessionStatsCached };

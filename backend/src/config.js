@@ -1,7 +1,17 @@
 'use strict';
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const { resolveProjectsDir } = require('@recensa/claude-session');
+
+// Codex session root: RECENSA_CODEX_SESSIONS_DIR -> CODEX_HOME/sessions -> ~/.codex/sessions.
+// Unlike PROJECTS_DIR this is optional (Codex may not be installed) -> no fail-fast validation here;
+// a missing directory just yields zero Codex sessions (handled by the indexer's target enumeration).
+function resolveCodexSessionsDir() {
+  if (process.env.RECENSA_CODEX_SESSIONS_DIR) return process.env.RECENSA_CODEX_SESSIONS_DIR;
+  const codexHome = process.env.CODEX_HOME || path.join(os.homedir(), '.codex');
+  return path.join(codexHome, 'sessions');
+}
 
 // resolveProjectsDir({validate:true}) only checks existence; a path that exists but is a
 // FILE (a botched volume mount) would pass it and then die much later as a bare ENOTDIR
@@ -24,6 +34,7 @@ module.exports = {
   // Root directory of the session JSONL files (single source of truth: resolveProjectsDir in claude-session/lib/resolver)
   // Precedence: RECENSA_PROJECTS_DIR -> CLAUDE_CONFIG_DIR/projects -> ~/.claude/projects; fail-fast at startup if missing or not a directory
   PROJECTS_DIR: resolveProjectsDirStrict(),
+  CODEX_SESSIONS_DIR: resolveCodexSessionsDir(),
   // viewer.db + flags.db live here. Overridable (RECENSA_DATA_DIR) for container volume placement and hermetic tests;
   // default unchanged (backend/data, the path the Docker volume mounts), so leaving the env unset is a no-op.
   DATA_DIR: process.env.RECENSA_DATA_DIR || path.join(__dirname, '..', 'data'),

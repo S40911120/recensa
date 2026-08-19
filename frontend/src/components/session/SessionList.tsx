@@ -84,8 +84,9 @@ function HitRow({ hit, onOpenHit }: Readonly<{ hit: SearchHit; onOpenHit: (trail
   );
 }
 
-/** Message-level hits: grouped by session (multiple hits in one file form one group); each hit is clickable to jump to its position */
-function SearchHits({ query, onOpenHit }: Readonly<{ query: string; onOpenHit: (trail: string[], index: number) => void }>) {
+/** Message-level hits: grouped by session (multiple hits in one file form one group); each hit is clickable to jump to its position.
+ *  `source` is required (never searches across sources) so a Codex hit can never surface while browsing Claude Code sessions or vice versa. */
+function SearchHits({ query, source, onOpenHit }: Readonly<{ query: string; source: string; onOpenHit: (trail: string[], index: number) => void }>) {
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [error, setError] = useState('');
   // starts true: SearchHits only mounts when there is a query, so a search always follows — this avoids
@@ -97,7 +98,7 @@ function SearchHits({ query, onOpenHit }: Readonly<{ query: string; onOpenHit: (
     setError('');
     setLoading(true);
     const t = setTimeout(() => {
-      searchAll(query, HITS_LIMIT, controller.signal)
+      searchAll(query, source, HITS_LIMIT, controller.signal)
         .then((h) => {
           setHits(h);
           setLoading(false);
@@ -112,7 +113,7 @@ function SearchHits({ query, onOpenHit }: Readonly<{ query: string; onOpenHit: (
       controller.abort();
       clearTimeout(t);
     };
-  }, [query]);
+  }, [query, source]);
 
   // Group by session while preserving hit order (relevance)
   const groups = useMemo(() => {
@@ -203,7 +204,14 @@ export function SessionList({ filters, onFiltersChange, selectedId, refreshKey, 
           'block w-full cursor-pointer border-b border-border px-3 py-2 text-left transition-colors hover:bg-accent/60',
           s.id === selectedId && 'border-l-4 border-l-primary bg-accent'
         )}
-        onClick={() => onSelect(s.id)}
+        onClick={() => {
+          // Clicking the already-open session doesn't change the URL hash, so Reader never remounts and
+          // never re-runs its "where to open" decision -- fire an explicit re-apply event so the Settings
+          // "jump to latest" toggle actually does something when you click back onto a session you're
+          // already viewing (e.g. an actively-growing one), not just on a fresh navigation into it.
+          if (s.id === selectedId) globalThis.dispatchEvent(new CustomEvent('recensa:reopen-session', { detail: s.id }));
+          onSelect(s.id);
+        }}
       >
         <div className="flex items-baseline gap-1.5">
           {s.pinned === 1 && <Star className="size-3.5 shrink-0 fill-primary text-primary" />}
@@ -228,21 +236,35 @@ export function SessionList({ filters, onFiltersChange, selectedId, refreshKey, 
 
   return (
     <div className="flex h-full flex-col">
-      {/* Brand row: icon + wordmark link home, with the current listed-session count on the right */}
-      <button
-        type="button"
-        className="group hidden w-full cursor-pointer items-center gap-2.5 border-b border-border px-3.5 py-2.5 text-left transition-colors hover:bg-accent/50 lg:flex"
-        aria-label="Back to home"
-        onClick={onHome}
-      >
-        <RecensaIcon className="size-8" />
-        <span className="font-display text-lg font-extrabold leading-none tracking-tight">Recensa</span>
+      {/* Brand row: icon + wordmark link home, source picker next to the title, listed-session count on the far right */}
+      <div className="hidden items-center gap-2 border-b border-border px-3.5 py-2.5 lg:flex">
+        <button
+          type="button"
+          className="group flex min-w-0 cursor-pointer items-center gap-2.5 text-left"
+          aria-label="Back to home"
+          onClick={onHome}
+        >
+          <RecensaIcon className="size-8 shrink-0" />
+          <span className="truncate font-display text-lg font-extrabold leading-none tracking-tight">Recensa</span>
+        </button>
+        <div className="relative shrink-0">
+          <select
+            className="h-7 cursor-pointer appearance-none rounded-md border border-border bg-background py-0 pl-2 pr-6 text-xs text-foreground focus-visible:outline-2 focus-visible:outline-primary/70"
+            value={filters.source}
+            aria-label="Filter by source"
+            onChange={(e) => onFiltersChange({ ...filters, source: e.target.value, project: '' })}
+          >
+            <option value="claude">Claude Code</option>
+            <option value="codex">Codex</option>
+          </select>
+          <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 size-3 -translate-y-1/2 text-muted-foreground" />
+        </div>
         {sessions.length > 0 && (
           <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 font-mono text-micro font-medium tabular-nums text-primary">
             {sessions.length}
           </span>
         )}
-      </button>
+      </div>
 
       {/* Search + filters: unified h-9 rounded-lg control sizing */}
       <div className="flex flex-col gap-2 border-b border-border p-3">
@@ -306,6 +328,19 @@ export function SessionList({ filters, onFiltersChange, selectedId, refreshKey, 
             </select>
             <ChevronDown className="pointer-events-none absolute right-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
           </div>
+          {/* Mobile only — on desktop this control lives in the brand row next to the "Recensa" title */}
+          <div className="relative min-w-0 shrink-0 lg:hidden">
+            <select
+              className="h-9 w-28 cursor-pointer appearance-none rounded-lg border border-border bg-background px-2.5 pr-6 text-xs text-foreground focus-visible:outline-2 focus-visible:outline-primary/70"
+              value={filters.source}
+              aria-label="Filter by source"
+              onChange={(e) => onFiltersChange({ ...filters, source: e.target.value, project: '' })}
+            >
+              <option value="claude">Claude Code</option>
+              <option value="codex">Codex</option>
+            </select>
+            <ChevronDown className="pointer-events-none absolute right-1.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          </div>
           <button
             type="button"
             className={cn(
@@ -329,7 +364,7 @@ export function SessionList({ filters, onFiltersChange, selectedId, refreshKey, 
           const q = filters.query.trim();
           // When a query looks like a session id (uuid prefix) → skip FTS content search (trigram 3-gram false positives); otherwise → content matches on top
           const looksLikeSid = isSidLike(q);
-          const contentHits = q && !looksLikeSid ? <SearchHits query={q} onOpenHit={onOpenHit} /> : null;
+          const contentHits = q && !looksLikeSid ? <SearchHits query={q} source={filters.source} onOpenHit={onOpenHit} /> : null;
           const listHeader =
             q && sessions.length > 0 ? (
               <h3 className="px-3 pt-2 pb-1 text-micro font-semibold uppercase tracking-wide text-muted-foreground">
@@ -355,11 +390,14 @@ export function SessionList({ filters, onFiltersChange, selectedId, refreshKey, 
               {!isLoading && !error && sessions.length === 0 && !contentHits && (
                 // Two distinct empty states: filters active → nothing matched; no filters at all →
                 // a fresh deploy where "still indexing" and "mount points at the wrong place" are
-                // otherwise indistinguishable for a new user staring at a blank list.
-                Object.entries(filters).every(([, v]) => v === '' || v === false) ? (
+                // otherwise indistinguishable for a new user staring at a blank list. `source` is excluded here:
+                // it is always set (never '') by design, so it must not itself count as "a filter is active".
+                Object.entries(filters).every(([k, v]) => k === 'source' || v === '' || v === false) ? (
                   <p className="p-4 text-sm text-muted-foreground">
-                    No sessions yet. If indexing is running (progress pill, bottom corner), they will appear shortly —
-                    otherwise check that your <code className="font-mono">~/.claude</code> mount points at the right directory.
+                    {filters.source === 'codex'
+                      ? 'No Codex sessions yet, or none found under this Codex install’s session directory.'
+                      : <>No sessions yet. If indexing is running (progress pill, bottom corner), they will appear shortly —
+                      otherwise check that your <code className="font-mono">~/.claude</code> mount points at the right directory.</>}
                   </p>
                 ) : (
                   <p className="p-4 text-sm text-muted-foreground">No matching sessions</p>

@@ -1,4 +1,4 @@
-import { CaseSensitive, ChevronDown, HelpCircle, Palette, Settings as SettingsIcon } from 'lucide-react';
+import { CaseSensitive, ChevronDown, HelpCircle, MoveVertical, Palette, Settings as SettingsIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { getSettings, saveSettings } from '../services/api';
@@ -34,6 +34,13 @@ type ThemeId = (typeof THEMES)[number]['id'];
 
 const FONT_KEY = 'recensa:font-size';
 const THEME_KEY = 'recensa:theme';
+const SCROLL_TO_LATEST_KEY = 'recensa:scroll-to-latest';
+
+/** First-paint value for the checkbox only (the actual open-a-session decision asks the server directly,
+ *  in useMessages, so it can never disagree with what this dialog displays). */
+function readScrollToLatest(): boolean {
+  return localStorage.getItem(SCROLL_TO_LATEST_KEY) === '1';
+}
 
 function loadFromLS<T extends string>(key: string, valid: readonly { id: T }[], def: T): T {
   const saved = localStorage.getItem(key);
@@ -52,6 +59,7 @@ function loadInitial<T extends string>(attr: string | undefined, key: string, va
 export function Settings() {
   const [size, setSize] = useState<FontSizeId>(() => loadInitial(document.documentElement.dataset.fontSize, FONT_KEY, FONT_SIZES, 'md'));
   const [theme, setTheme] = useState<ThemeId>(() => loadInitial(document.documentElement.dataset.theme, THEME_KEY, THEMES, 'classic'));
+  const [scrollToLatest, setScrollToLatest] = useState<boolean>(readScrollToLatest);
   // DB is the source of truth, LS is only a first-paint cache: don't write back until the DB value arrives, so mount never dirties the DB with the LS initial value
   const [hydrated, setHydrated] = useState(false);
 
@@ -60,6 +68,7 @@ export function Settings() {
     getSettings().then((s) => {
       if (s.fontSize && FONT_SIZES.some((x) => x.id === s.fontSize)) setSize(s.fontSize as FontSizeId);
       if (s.theme && THEMES.some((x) => x.id === s.theme)) setTheme(s.theme as ThemeId);
+      if (s.scrollToLatest === '0' || s.scrollToLatest === '1') setScrollToLatest(s.scrollToLatest === '1');
     }).catch(() => {}).finally(() => setHydrated(true));
   }, []);
 
@@ -76,6 +85,11 @@ export function Settings() {
     if (!hydrated) return;
     saveSettings({ theme }).catch((e: unknown) => { console.warn('[settings] save theme failed', e); });
   }, [theme, hydrated]);
+  useEffect(() => {
+    localStorage.setItem(SCROLL_TO_LATEST_KEY, scrollToLatest ? '1' : '0');
+    if (!hydrated) return;
+    saveSettings({ scrollToLatest: scrollToLatest ? '1' : '0' }).catch((e: unknown) => { console.warn('[settings] save scrollToLatest failed', e); });
+  }, [scrollToLatest, hydrated]);
 
   return (
     <div className="flex items-center gap-0.5 border-t border-border px-2 py-1.5">
@@ -148,6 +162,21 @@ export function Settings() {
               </select>
               <ChevronDown aria-hidden className="pointer-events-none absolute right-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
             </div>
+          </section>
+          <section className="mt-4">
+            <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground [&_svg]:size-3.5">
+              <MoveVertical />
+              Opening a session
+            </h4>
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-foreground">
+              <input
+                type="checkbox"
+                className="size-3.5 cursor-pointer accent-primary"
+                checked={scrollToLatest}
+                onChange={(e) => setScrollToLatest(e.target.checked)}
+              />
+              Jump straight to the latest message (otherwise starts at the top)
+            </label>
           </section>
         </DialogContent>
       </Dialog>

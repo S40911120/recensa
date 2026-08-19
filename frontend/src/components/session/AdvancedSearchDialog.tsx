@@ -105,7 +105,7 @@ export function AdvancedSearchDialog({ filters, onApply }: Readonly<AdvancedSear
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setDraft({ ...EMPTY_FILTERS, project: draft.project, query: draft.query, pinnedOnly: draft.pinnedOnly })}
+              onClick={() => setDraft({ ...EMPTY_FILTERS, project: draft.project, query: draft.query, pinnedOnly: draft.pinnedOnly, source: draft.source })}
             >
               Clear filters
             </Button>

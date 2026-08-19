@@ -17,6 +17,9 @@ export interface SessionFilters {
   since: string;
   until: string;
   tag: string;
+  /** Which tool recorded the session ('claude' | 'codex'). Never empty: Claude Code and Codex sessions
+   *  must never be listed/searched together, so a source is always selected (default 'claude'). */
+  source: string;
 }
 
 export const EMPTY_FILTERS: SessionFilters = {
@@ -28,6 +31,7 @@ export const EMPTY_FILTERS: SessionFilters = {
   since: '',
   until: '',
   tag: '',
+  source: 'claude',
 };
 
 function toParams(filters: SessionFilters, limit: number, offset: number) {
@@ -39,6 +43,7 @@ function toParams(filters: SessionFilters, limit: number, offset: number) {
     since: filters.since || undefined,
     until: filters.until || undefined,
     tag: filters.tag || undefined,
+    source: filters.source || undefined,
     pinned: filters.pinnedOnly,
     limit,
     offset,
@@ -71,11 +76,11 @@ export function useSessions(filters: SessionFilters, refreshKey = 0): UseSession
 
   useEffect(() => {
     const controller = new AbortController();
-    listProjects(controller.signal)
+    listProjects(filters.source || undefined, controller.signal)
       .then(setProjects)
       .catch(() => setProjects([]));
     return () => controller.abort();
-  }, []);
+  }, [filters.source]);
 
   const filtersKey = JSON.stringify(filters);
   const filtersRef = useRef(filters);

@@ -33,6 +33,8 @@ export interface SessionListParams {
   until?: string;
   pinned?: boolean;
   tag?: string;
+  /** Which tool recorded the session ('claude' | 'codex'); omitted = all sources */
+  source?: string;
   limit?: number;
   offset?: number;
 }
@@ -47,13 +49,16 @@ export function listSessions(params: SessionListParams, signal?: AbortSignal): P
   if (params.until) sp.set('until', params.until);
   if (params.pinned) sp.set('pinned', '1');
   if (params.tag) sp.set('tag', params.tag);
+  if (params.source) sp.set('source', params.source);
   sp.set('limit', String(params.limit ?? 60));
   sp.set('offset', String(params.offset ?? 0));
   return getJson<SessionSummary[]>(`/api/sessions?${sp.toString()}`, signal);
 }
 
-export function listProjects(signal?: AbortSignal): Promise<ProjectEntry[]> {
-  return getJson<ProjectEntry[]>('/api/projects', signal);
+export function listProjects(source?: string, signal?: AbortSignal): Promise<ProjectEntry[]> {
+  const sp = new URLSearchParams();
+  if (source) sp.set('source', source);
+  return getJson<ProjectEntry[]>(`/api/projects?${sp.toString()}`, signal);
 }
 
 export function getSession(id: string, signal?: AbortSignal): Promise<SessionDetail> {
@@ -74,8 +79,9 @@ export function getMessages(
   );
 }
 
-export function searchAll(q: string, limit = 50, signal?: AbortSignal): Promise<SearchHit[]> {
-  return getJson<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}`, signal);
+/** `source` is required so a search never mixes Claude Code and Codex results together. */
+export function searchAll(q: string, source: string, limit = 50, signal?: AbortSignal): Promise<SearchHit[]> {
+  return getJson<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}&source=${encodeURIComponent(source)}&limit=${limit}`, signal);
 }
 
 export function listTags(signal?: AbortSignal): Promise<string[]> {

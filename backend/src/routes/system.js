@@ -25,6 +25,7 @@ router.get('/api/settings', (_req, res) => {
 const SETTING_VALUES = {
   fontSize: new Set(['sm', 'md', 'lg']),
   theme: new Set(['classic', 'solarized', 'catppuccin', 'githublight', 'dracula', 'monokai', 'onedark', 'tokyonight', 'gruvbox', 'nord', 'githubdark', 'mocha', 'solarizeddark', 'rosepine']),
+  scrollToLatest: new Set(['0', '1']),
 };
 
 router.put('/api/settings', (req, res) => {

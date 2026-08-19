@@ -1,6 +1,8 @@
 export interface SessionSummary {
   id: string;
   kind: 'main' | 'subagent';
+  /** Which tool recorded this session */
+  source: 'claude' | 'codex';
   project: string;
   cwd: string | null;
   parent_session: string | null;

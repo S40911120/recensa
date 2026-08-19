@@ -18,6 +18,7 @@ function toSessionDto(row) {
   return {
     id: row.id,
     kind: row.kind,
+    source: row.source,
     project: row.project,
     cwd: row.cwd,
     parent_session: row.parent_session,

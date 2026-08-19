@@ -98,7 +98,8 @@ function connect({ migrate }) {
       custom_agent_type TEXT,                 -- subagent meta.customAgentType
       forked_from TEXT,                       -- upstream session (first record-level forkedFrom.sessionId)
       compact_count INTEGER NOT NULL DEFAULT 0, -- number of compact_boundary markers (>0 = this session was compacted at some point)
-      size INTEGER NOT NULL DEFAULT 0
+      size INTEGER NOT NULL DEFAULT 0,
+      source TEXT NOT NULL DEFAULT 'claude'   -- which tool recorded this session: 'claude' | 'codex'
     );
     CREATE INDEX IF NOT EXISTS idx_sessions_forked ON sessions(forked_from);
     CREATE INDEX IF NOT EXISTS idx_sessions_last ON sessions(last_ts DESC);
@@ -146,6 +147,7 @@ function connect({ migrate }) {
     "ALTER TABLE sessions ADD COLUMN spawn_depth INTEGER",                       // subagent meta.spawnDepth
     "ALTER TABLE sessions ADD COLUMN custom_agent_type TEXT",                    // subagent meta.customAgentType
     "ALTER TABLE sessions ADD COLUMN model_names TEXT",                          // JSON array of all models used
+    "ALTER TABLE sessions ADD COLUMN source TEXT NOT NULL DEFAULT 'claude'",     // which tool recorded this session
   ]) {
     try {
       db.exec(ddl);
@@ -154,6 +156,9 @@ function connect({ migrate }) {
       if (!/duplicate column/i.test(err.message)) throw err;
     }
   }
+  // Index for the newly-migrated `source` column -- created after the ALTER loop above (not in the initial CREATE
+  // block) so an existing database has the column by the time this runs; a fresh database already has it via CREATE TABLE.
+  db.exec('CREATE INDEX IF NOT EXISTS idx_sessions_source ON sessions(source)');
   migrateFtsToTrigram(db);
   const uvRow = db.prepare('PRAGMA user_version').get() || { user_version: 0 };
   // v0->v1: backfill for the introduction of agent_spawns
