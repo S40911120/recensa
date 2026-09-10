@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import { appPath } from '../lib/basePath';
 import { errMessage } from '../lib/utils';
 import { getMessages } from '../services/api';
 import type { Message } from '../types';
@@ -333,7 +334,7 @@ export function useMessages(
     function connect() {
       if (disposed) return;
       const proto = globalThis.location.protocol === 'https:' ? 'wss' : 'ws';
-      ws = new WebSocket(`${proto}://${globalThis.location.host}/ws`);
+      ws = new WebSocket(`${proto}://${globalThis.location.host}${appPath('/ws')}`);
       ws.onopen = () => {
         attempts = 0;
         setIsLive(true);

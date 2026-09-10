@@ -5,9 +5,10 @@ import type {
   SessionDetail,
   SessionSummary,
 } from '../types';
+import { appPath } from '../lib/basePath';
 
 /** Fetch error carrying the HTTP status, so callers can tell an expected 404 from a genuine 5xx failure */
-class HttpError extends Error {
+export class HttpError extends Error {
   status: number;
   constructor(status: number, message: string) {
     super(message);
@@ -49,15 +50,15 @@ export function listSessions(params: SessionListParams, signal?: AbortSignal): P
   if (params.tag) sp.set('tag', params.tag);
   sp.set('limit', String(params.limit ?? 60));
   sp.set('offset', String(params.offset ?? 0));
-  return getJson<SessionSummary[]>(`/api/sessions?${sp.toString()}`, signal);
+  return getJson<SessionSummary[]>(appPath(`/api/sessions?${sp.toString()}`), signal);
 }
 
 export function listProjects(signal?: AbortSignal): Promise<ProjectEntry[]> {
-  return getJson<ProjectEntry[]>('/api/projects', signal);
+  return getJson<ProjectEntry[]>(appPath('/api/projects'), signal);
 }
 
 export function getSession(id: string, signal?: AbortSignal): Promise<SessionDetail> {
-  return getJson<SessionDetail>(`/api/session/${encodeURIComponent(id)}`, signal);
+  return getJson<SessionDetail>(appPath(`/api/session/${encodeURIComponent(id)}`), signal);
 }
 
 export function getMessages(
@@ -69,17 +70,17 @@ export function getMessages(
 ): Promise<MessagesPage> {
   const base = reconstructed ? 'reconstructed/messages' : 'messages';
   return getJson<MessagesPage>(
-    `/api/session/${encodeURIComponent(id)}/${base}?from=${from}&limit=${limit}`,
+    appPath(`/api/session/${encodeURIComponent(id)}/${base}?from=${from}&limit=${limit}`),
     signal
   );
 }
 
 export function searchAll(q: string, limit = 50, signal?: AbortSignal): Promise<SearchHit[]> {
-  return getJson<SearchHit[]>(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}`, signal);
+  return getJson<SearchHit[]>(appPath(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}`), signal);
 }
 
 export function listTags(signal?: AbortSignal): Promise<string[]> {
-  return getJson<string[]>('/api/tags', signal);
+  return getJson<string[]>(appPath('/api/tags'), signal);
 }
 
 export interface FlagsUpdate {
@@ -90,7 +91,7 @@ export interface FlagsUpdate {
 }
 
 export async function updateFlags(id: string, update: FlagsUpdate): Promise<void> {
-  const res = await fetch(`/api/session/${encodeURIComponent(id)}/flags`, {
+  const res = await fetch(appPath(`/api/session/${encodeURIComponent(id)}/flags`), {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(update),
@@ -111,13 +112,13 @@ export interface SkillUsage {
 
 /** Skills used in this session (aggregated from Skill tool_use) */
 export function getSkills(id: string, signal?: AbortSignal): Promise<SkillUsage[]> {
-  return getJson<SkillUsage[]>(`/api/session/${encodeURIComponent(id)}/skills`, signal);
+  return getJson<SkillUsage[]>(appPath(`/api/session/${encodeURIComponent(id)}/skills`), signal);
 }
 
 /** Search-hit jump: uuid → its index within the session */
 export async function locateMessage(id: string, uuid: string, signal?: AbortSignal): Promise<number> {
   const r = await getJson<{ index: number }>(
-    `/api/session/${encodeURIComponent(id)}/locate?uuid=${encodeURIComponent(uuid)}`,
+    appPath(`/api/session/${encodeURIComponent(id)}/locate?uuid=${encodeURIComponent(uuid)}`),
     signal
   );
   return r.index;
@@ -136,7 +137,7 @@ export async function locateSpawnCall(id: string, target: SpawnLocateTarget, sig
     ? `toolUseId=${encodeURIComponent(target.toolUseId)}`
     : `agentName=${encodeURIComponent(target.agentName)}&nth=${target.nth}`;
   try {
-    const r = await getJson<{ index: number }>(`/api/session/${encodeURIComponent(id)}/locate?${q}`, signal);
+    const r = await getJson<{ index: number }>(appPath(`/api/session/${encodeURIComponent(id)}/locate?${q}`), signal);
     return r.index;
   } catch (e) {
     if (e instanceof HttpError && e.status === 404) return -1; // expected not-found
@@ -146,13 +147,13 @@ export async function locateSpawnCall(id: string, target: SpawnLocateTarget, sig
 
 export function getBoundaries(id: string, reconstructed = false, signal?: AbortSignal): Promise<BoundaryNode[]> {
   return getJson<BoundaryNode[]>(
-    `/api/session/${encodeURIComponent(id)}/boundaries${reconstructed ? '?reconstructed=1' : ''}`,
+    appPath(`/api/session/${encodeURIComponent(id)}/boundaries${reconstructed ? '?reconstructed=1' : ''}`),
     signal
   );
 }
 
 export async function deleteSession(id: string): Promise<void> {
-  const res = await fetch(`/api/session/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  const res = await fetch(appPath(`/api/session/${encodeURIComponent(id)}`), { method: 'DELETE' });
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
     throw new Error(body?.error ?? `HTTP ${res.status}`);
@@ -169,14 +170,47 @@ export interface SessionStats {
 }
 
 export function getSessionStats(id: string, signal?: AbortSignal): Promise<SessionStats> {
-  return getJson<SessionStats>(`/api/session/${encodeURIComponent(id)}/stats`, signal);
+  return getJson<SessionStats>(appPath(`/api/session/${encodeURIComponent(id)}/stats`), signal);
 }
 
 export function getSettings(signal?: AbortSignal): Promise<Record<string, string>> {
-  return getJson<Record<string, string>>('/api/settings', signal);
+  return getJson<Record<string, string>>(appPath('/api/settings'), signal);
 }
 
 export async function saveSettings(updates: Record<string, string>): Promise<void> {
-  const res = await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) });
+  const res = await fetch(appPath('/api/settings'), { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updates) });
   if (!res.ok) throw new Error('Failed to save settings');
+}
+
+export interface UploadResult {
+  sessionId: string;
+  filename: string;
+  project: string;
+  indexed: boolean;
+}
+
+export async function uploadSession(file: File, signal?: AbortSignal): Promise<UploadResult> {
+  const form = new FormData();
+  form.append('file', file, file.name);
+  const res = await fetch(appPath('/api/upload'), { method: 'POST', body: form, signal });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new HttpError(res.status, body?.error ?? `HTTP ${res.status}`);
+  }
+  return (await res.json()) as UploadResult;
+}
+
+/** Wait for the worker to expose a newly uploaded session before navigating to it. */
+export async function waitForSession(id: string, timeoutMs = 90_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      await getSession(id);
+      return;
+    } catch (err) {
+      if (!(err instanceof HttpError) || err.status !== 404) throw err;
+    }
+    await new Promise<void>((resolve) => setTimeout(resolve, 500));
+  }
+  throw new Error('文件已上传，但索引仍在进行，请稍后刷新会话列表');
 }

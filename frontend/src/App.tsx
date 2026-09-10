@@ -171,6 +171,10 @@ export function App() {
 
   const handleSelect = useCallback((sessionId: string) => writeHash([sessionId]), []);
   const handleHome = useCallback(() => writeHash([]), []);
+  const handleUploadComplete = useCallback((sessionId: string) => {
+    setListRefreshKey((n) => n + 1);
+    writeHash([sessionId]);
+  }, []);
   const handleOpenSubagent = useCallback(
     (subagentSessionId: string) => writeHash([...trail, subagentSessionId]),
     [trail]
@@ -289,6 +293,7 @@ export function App() {
           onSelect={handleSelect}
           onOpenHit={handleOpenHit}
           onHome={handleHome}
+          onUploadComplete={handleUploadComplete}
         />
       </div>
       <Settings />

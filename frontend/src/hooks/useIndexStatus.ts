@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 
+import { appPath } from '../lib/basePath';
+
 /** Backend index status (/api/index-status snapshot + WS index_progress/index_done). */
 export interface IndexStatus {
   indexing: boolean;
@@ -25,7 +27,7 @@ export function useIndexStatus(): IndexStatus {
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/index-status')
+    fetch(appPath('/api/index-status'))
       .then((r) => r.json())
       .then((s: IndexStatus) => { if (!cancelled) setStatus(s); })
       .catch(() => { /* DB not ready before the first index → stay idle */ });
@@ -36,7 +38,7 @@ export function useIndexStatus(): IndexStatus {
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
     const connect = () => {
       const proto = globalThis.location.protocol === 'https:' ? 'wss' : 'ws';
-      ws = new WebSocket(`${proto}://${globalThis.location.host}/ws`);
+      ws = new WebSocket(`${proto}://${globalThis.location.host}${appPath('/ws')}`);
       ws.onopen = () => { retry = 0; };
       ws.onmessage = (ev: MessageEvent<string>) => {
         try {
