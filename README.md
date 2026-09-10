@@ -7,8 +7,8 @@
 <p align="center">
   <strong>See what your agents actually did.</strong><br>
   A self-hosted viewer for your Claude Code session transcripts — read, search,
-  replay, and audit every session you have ever run. Your transcripts stay on your
-  machine; nothing is uploaded anywhere.
+  replay, and audit every session you have ever run. Your transcripts stay within
+  your self-hosted deployment; nothing is sent to an external service.
 </p>
 
 <p align="center">
@@ -205,6 +205,9 @@ The smaller things you notice after a day of use:
 
 - **Advanced search filters** — narrow a query by session-id prefix, model, or a
   date window; filter the session list by project or to pinned-only.
+- **Upload a transcript** — use the Upload button to add a local `.jsonl` file to
+  the viewer; it is indexed and opened automatically, while previous uploads stay
+  available in the `uploads` project.
 - **Copy the resume command** — one button in the info panel yields the exact
   `claude --resume` invocation for the session, ready to paste into a terminal.
 - **Rich tool rendering** — TodoWrite checklists, AskUserQuestion choices, and Bash
@@ -241,9 +244,9 @@ picture from the transcripts already on your disk:
 
 ## Non-goals
 
-- **Not an editor.** It never rewrites transcript content. The only write path to your
-  transcripts is the explicit, guarded session delete described in
-  [Security and your data](#security-and-your-data).
+- **Not an editor.** It never rewrites transcript content. Transcript changes are
+  limited to explicitly uploading a new file or using the guarded session delete
+  described in [Security and your data](#security-and-your-data).
 - **Not a cloud service.** No accounts, no telemetry, no external network calls.
 - **Not a Claude Code replacement.** It reads the transcripts Claude Code already
   writes to disk.
@@ -389,6 +392,7 @@ Advanced overrides (for running from source or remote self-hosting):
 | `PUID` / `PGID` | *(auto)* | Linux only: the uid/gid the container runs as. Auto-detected from the mounted directory's owner; set explicitly only to override that (e.g. `PUID=0` under an unusual rootless setup). |
 | `RECENSA_ALLOWED_HOSTS` | *(none)* | Extra comma-separated hostnames added to the Host/Origin allowlist. Needed behind a reverse proxy or a custom hosts-file name (see [Security](#security-and-your-data)). |
 | `RECENSA_WATCH_MODE` | *(auto)* | Watch strategy: `events` (native fs events) or `tick` (polling). Auto-selects `tick` inside Docker (where bind-mount fs events are unreliable) or when `RECENSA_PROJECTS_DIR` is set. |
+| `RECENSA_MAX_UPLOAD_BYTES` | `268435456` | Maximum size of a browser-uploaded `.jsonl` transcript (256 MiB). |
 
 ## Security and your data
 
@@ -416,11 +420,11 @@ Your transcripts:
 
 - **Reading never writes.** The indexer, parser, and reconstruction paths only read your
   JSONL.
-- **One write path exists: deleting a session.** `DELETE /api/session/:id` physically
-  removes the session's JSONL file and its subagents directory from disk. This is
-  irreversible. It is guarded: pinned sessions, sessions that belong to a fork/resume
-  chain, and individual subagents are all refused. Nothing else writes to your
-  transcripts.
+- **Explicit transcript writes are limited.** Uploading a `.jsonl` file stores it under
+  the `uploads` project and indexes it. `DELETE /api/session/:id` physically removes
+  an uploaded or source session's JSONL file and its subagents directory from disk.
+  This is irreversible. Deletes are guarded: pinned sessions, sessions that belong to
+  a fork/resume chain, and individual subagents are all refused.
 - **Your curation is safe.** Pins, tags, notes, and titles live in a separate `flags.db`
   that index rebuilds never touch. The `viewer.db` index is a disposable cache.
 

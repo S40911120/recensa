@@ -1,9 +1,9 @@
-import { Bot, ChevronDown, CornerDownRight, FolderOpen, MessageSquareText, Search, Star, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { Bot, ChevronDown, CornerDownRight, FolderOpen, MessageSquareText, Search, Star, Upload, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
 
 import { useSessions, type SessionFilters } from '../../hooks/useSessions';
 import { cn, errMessage } from '../../lib/utils';
-import { locateMessage, searchAll } from '../../services/api';
+import { locateMessage, searchAll, uploadSession, waitForSession } from '../../services/api';
 import type { SearchHit } from '../../types';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
@@ -27,6 +27,7 @@ interface SessionListProps {
   /** Search-hit jump: open the trail and locate the message position */
   onOpenHit: (trail: string[], index: number) => void;
   onHome: () => void;
+  onUploadComplete: (sessionId: string) => void;
 }
 
 /** Open path for a matched session (a subagent hit must go through its parent first) */
@@ -164,10 +165,30 @@ function SearchHits({ query, onOpenHit }: Readonly<{ query: string; onOpenHit: (
   );
 }
 
-export function SessionList({ filters, onFiltersChange, selectedId, refreshKey, onSelect, onOpenHit, onHome }: Readonly<SessionListProps>) {
+export function SessionList({ filters, onFiltersChange, selectedId, refreshKey, onSelect, onOpenHit, onHome, onUploadComplete }: Readonly<SessionListProps>) {
   const { sessions, projects, isLoading, isLoadingMore, error, hasMore, loadMore } = useSessions(filters, refreshKey);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadInputRef = useRef<HTMLInputElement | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+
+  async function handleUploadChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setUploadError('');
+    setIsUploading(true);
+    try {
+      const result = await uploadSession(file);
+      if (!result.indexed) await waitForSession(result.sessionId);
+      onUploadComplete(result.sessionId);
+    } catch (err: unknown) {
+      setUploadError(errMessage(err));
+    } finally {
+      setIsUploading(false);
+    }
+  }
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -321,7 +342,27 @@ export function SessionList({ filters, onFiltersChange, selectedId, refreshKey, 
             <Star className={cn(filters.pinnedOnly && 'fill-primary')} />
             Pinned only
           </button>
+          <Button
+            type="button"
+            variant="secondary"
+            className="h-9 shrink-0 px-2.5 text-xs [&_svg]:size-3.5"
+            aria-label="Upload JSONL session"
+            title="Upload JSONL session"
+            disabled={isUploading}
+            onClick={() => uploadInputRef.current?.click()}
+          >
+            {isUploading ? <LoadingDots label="Uploading" /> : <><Upload /><span className="hidden xl:inline">Upload</span></>}
+          </Button>
+          <input
+            ref={uploadInputRef}
+            type="file"
+            accept=".jsonl,application/jsonl"
+            className="sr-only"
+            aria-label="Choose a JSONL session file"
+            onChange={(event) => void handleUploadChange(event)}
+          />
         </div>
+        {uploadError && <p role="alert" className="text-xs text-destructive">Upload failed: {uploadError}</p>}
       </div>
 
       <div className="flex-1 overflow-y-auto">

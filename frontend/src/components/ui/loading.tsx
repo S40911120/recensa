@@ -1,8 +1,9 @@
 import { cn } from '../../lib/utils';
+import { appPath } from '../../lib/basePath';
 
 /** Recensa brand mark — the transparent robot-inspector logo (served from /logo.png). */
 export function RecensaIcon({ className }: Readonly<{ className?: string }>) {
-  return <img src="/logo.png" alt="Recensa" className={cn('object-contain', className)} />;
+  return <img src={appPath('/logo.png')} alt="Recensa" className={cn('object-contain', className)} />;
 }
 
 /** Three-dot bouncing loading indicator (for small / inline loading states) */

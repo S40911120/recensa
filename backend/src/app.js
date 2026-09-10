@@ -63,6 +63,7 @@ function createApp() {
   app.use(require('./routes/sessions'));
   app.use(require('./routes/flags'));
   app.use(require('./routes/search'));
+  app.use(require('./routes/uploads'));
   // Serve the theme-injected index.html (must intercept '/' before the static handler)
   app.get(['/', '/index.html'], (_req, res, next) => {
     try {
