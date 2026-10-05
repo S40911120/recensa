@@ -76,3 +76,15 @@ test('deep-nested record: extractText cap keeps toMessage/forIndex from throwing
   // After the cap: toMessage non-null (shown), forIndex counts it, countsAsMessage true -- all three agree.
   assertAligned(deep, 'deep-nested user');
 });
+
+test('reasoning effort: assistant perTurnEffort/effort surfaces on toMessage and forIndex; user records stay null', () => {
+  const assistant = { type: 'assistant', uuid: 'a2', effort: 'medium', perTurnEffort: 'xhigh', message: { role: 'assistant', model: 'claude-opus-5-5', content: [{ type: 'text', text: 'yo' }] } };
+  assert.equal(toMessage(assistant).effort, 'xhigh');
+  assert.equal(forIndex(assistant).effort, 'xhigh');
+  const sessionOnly = { ...assistant, perTurnEffort: undefined };
+  assert.equal(toMessage(sessionOnly).effort, 'medium');
+  const legacy = { type: 'assistant', uuid: 'a3', message: { role: 'assistant', content: [{ type: 'text', text: 'yo' }] } };
+  assert.equal(toMessage(legacy).effort, null);
+  const user = { type: 'user', uuid: 'u2', effort: 'xhigh', message: { role: 'user', content: 'hi' } };
+  assert.equal(toMessage(user).effort, null);
+});
