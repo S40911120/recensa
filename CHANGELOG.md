@@ -6,6 +6,18 @@ a public release cadence is set.
 
 ## [Unreleased]
 
+### Added
+- **Reasoning effort**: the effort level Claude Code records on each assistant turn
+  (`perTurnEffort` / `effort`, e.g. `medium` / `xhigh` / `max`) is now shown next to
+  the model — in each reply's meta line and as an *Effort* row in the session
+  overview (with any other levels used when `/effort` was switched mid-session).
+  Transcripts written before Claude Code recorded the field, and models without an
+  effort setting, show `—`.
+
+### Upgrade notes
+- `viewer.db` gains `effort` / `effort_names` columns; the first start after
+  upgrading re-reads every transcript once to backfill them. `flags.db` is untouched.
+
 ## [0.1.2] — 2026-07-16
 
 Deploy-robustness release: a broad review across deployment environments (native

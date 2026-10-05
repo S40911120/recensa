@@ -146,6 +146,8 @@ function connect({ migrate }) {
     "ALTER TABLE sessions ADD COLUMN spawn_depth INTEGER",                       // subagent meta.spawnDepth
     "ALTER TABLE sessions ADD COLUMN custom_agent_type TEXT",                    // subagent meta.customAgentType
     "ALTER TABLE sessions ADD COLUMN model_names TEXT",                          // JSON array of all models used
+    "ALTER TABLE sessions ADD COLUMN effort TEXT",                               // latest record.perTurnEffort/effort
+    "ALTER TABLE sessions ADD COLUMN effort_names TEXT",                         // JSON array of all efforts used
   ]) {
     try {
       db.exec(ddl);
@@ -165,6 +167,11 @@ function connect({ migrate }) {
   if (uvRow.user_version < 2) {
     db.exec('DROP TABLE IF EXISTS main.session_flags');
     uvRow.user_version = 2;
+  }
+  // v2->v3: backfill for the introduction of effort/effort_names (full re-read; flags.db is unaffected)
+  if (uvRow.user_version < 3) {
+    db.exec('DELETE FROM files');
+    uvRow.user_version = 3;
   }
   // PRAGMA does not support bound parameters (prepare('... = ?') is an outright syntax error); the value is a controlled integer, so literal interpolation is safe
   if (uvRow.user_version > 0) db.exec(`PRAGMA user_version = ${Number(uvRow.user_version)}`);

@@ -13,6 +13,10 @@ export interface SessionSummary {
   model: string | null;
   /** All models used in this session (aggregated by the indexer; > 1 means the session switched models) */
   models: string[];
+  /** Reasoning effort of the latest assistant turn (Claude Code perTurnEffort/effort; null before CC recorded it) */
+  effort: string | null;
+  /** All reasoning efforts used in this session (> 1 means /effort was switched mid-session) */
+  efforts: string[];
   title: string | null;
   first_ts: string | null;
   last_ts: string | null;
@@ -182,6 +186,8 @@ export interface Message {
   ts: string | null;
   isSidechain: boolean;
   model: string | null;
+  /** Reasoning effort for this assistant turn (e.g. medium / xhigh) */
+  effort?: string | null;
   usage: TokenUsage | null;
   blocks: Block[];
 }
