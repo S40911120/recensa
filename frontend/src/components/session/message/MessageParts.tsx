@@ -14,7 +14,7 @@ export const joinText = (blocks: TextBlock[]): string => blocks.map((b) => b.tex
 export function metaText(message: Message): string {
   const parts: string[] = [];
   if (message.ts) parts.push(formatDateTime(message.ts));
-  if (message.model) parts.push(message.model);
+  if (message.model) parts.push(message.effort ? `${message.model} (${message.effort})` : message.model);
   const u = message.usage;
   if (u) {
     const t: string[] = [];

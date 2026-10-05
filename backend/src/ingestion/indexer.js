@@ -157,6 +157,8 @@ function newAggregate() {
     ftsRows: [],
     agentSpawns: [], // Agent/Task tool_use ids emitted by this session (builds the nesting tree)
     models: new Set(), // every model used in this session (tracks switching between models)
+    effort: null,
+    efforts: new Set(), // every reasoning effort used in this session (tracks /effort switches)
   };
 }
 
@@ -216,6 +218,7 @@ function applyMessageRecord(agg, sessionId, idx) {
   }
   // <synthetic> is a placeholder fake model for API errors; excluded from the set of used models
   if (idx.model) { agg.model = idx.model; if (idx.model !== '<synthetic>') agg.models.add(idx.model); }
+  if (idx.effort && idx.model !== '<synthetic>') { agg.effort = idx.effort; agg.efforts.add(idx.effort); }
   if (!agg.cwd && idx.cwd) agg.cwd = idx.cwd;
   if (idx.gitBranch) agg.gitBranch = idx.gitBranch; // last one wins (on a branch switch, the latest is the displayed value)
   agg.toolCalls += idx.toolCalls;
@@ -300,6 +303,8 @@ function persist(db, stmts, t, st, newOffset, agg, isIncremental) {
     forked_from: agg.forkedFrom,
     compact_count: agg.compactCount,
     model_names: agg.models.size > 0 ? JSON.stringify([...agg.models]) : null,
+    effort: agg.effort,
+    effort_names: agg.efforts.size > 0 ? JSON.stringify([...agg.efforts]) : null,
     size: st.size,
   };
   db.exec('BEGIN IMMEDIATE');
@@ -364,13 +369,14 @@ function removeByPath(filePath) {
 }
 
 const SESSION_COLUMNS = `(id, kind, project, cwd, file, parent_session, agent_name, agent_type, agent_desc,
-   tool_use_id, task_kind, team_name, model, agent_model, spawn_depth, custom_agent_type, title, title_rank, first_ts, last_ts, msg_count, user_prompts, tool_calls, tokens_out, tokens_in, cache_read, cache_creation, git_branch, forked_from, compact_count, model_names, size)
+   tool_use_id, task_kind, team_name, model, agent_model, spawn_depth, custom_agent_type, title, title_rank, first_ts, last_ts, msg_count, user_prompts, tool_calls, tokens_out, tokens_in, cache_read, cache_creation, git_branch, forked_from, compact_count, model_names, effort, effort_names, size)
   VALUES (@id, @kind, @project, @cwd, @file, @parent_session, @agent_name, @agent_type, @agent_desc,
-   @tool_use_id, @task_kind, @team_name, @model, @agent_model, @spawn_depth, @custom_agent_type, @title, @title_rank, @first_ts, @last_ts, @msg_count, @user_prompts, @tool_calls, @tokens_out, @tokens_in, @cache_read, @cache_creation, @git_branch, @forked_from, @compact_count, @model_names, @size)`;
+   @tool_use_id, @task_kind, @team_name, @model, @agent_model, @spawn_depth, @custom_agent_type, @title, @title_rank, @first_ts, @last_ts, @msg_count, @user_prompts, @tool_calls, @tokens_out, @tokens_in, @cache_read, @cache_creation, @git_branch, @forked_from, @compact_count, @model_names, @effort, @effort_names, @size)`;
 
 const SESSION_META_UPDATES = `
   cwd = COALESCE(sessions.cwd, excluded.cwd),
   model = COALESCE(excluded.model, sessions.model),
+  effort = COALESCE(excluded.effort, sessions.effort),
   agent_model = COALESCE(excluded.agent_model, sessions.agent_model),
   spawn_depth = COALESCE(excluded.spawn_depth, sessions.spawn_depth),
   custom_agent_type = COALESCE(excluded.custom_agent_type, sessions.custom_agent_type),
@@ -415,6 +421,13 @@ function makeStatements(db) {
             UNION
             SELECT value FROM json_each(COALESCE(excluded.model_names, '[]'))
           )
+        ),
+        effort_names = (
+          SELECT json_group_array(DISTINCT value) FROM (
+            SELECT value FROM json_each(COALESCE(sessions.effort_names, '[]'))
+            UNION
+            SELECT value FROM json_each(COALESCE(excluded.effort_names, '[]'))
+          )
         )
     `),
     // Full read: counts are absolutely overwritten (together with deleteFts this stays idempotent); model_names is likewise absolutely overwritten
@@ -429,7 +442,8 @@ function makeStatements(db) {
         cache_read = excluded.cache_read,
         cache_creation = excluded.cache_creation,
         compact_count = excluded.compact_count,
-        model_names = excluded.model_names
+        model_names = excluded.model_names,
+        effort_names = excluded.effort_names
     `),
     deleteFts: db.prepare('DELETE FROM messages_fts WHERE session_id = ?'),
     insertFts: db.prepare('INSERT INTO messages_fts (session_id, uuid, ts, mtype, text) VALUES (?, ?, ?, ?, ?)'),

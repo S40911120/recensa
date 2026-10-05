@@ -281,6 +281,13 @@ function buildErrorDetail(record, msg, type) {
   };
 }
 
+/** Reasoning effort Claude Code recorded on an assistant record (record-level perTurnEffort/effort, CC >= ~2.1.2xx); null otherwise */
+function recordEffort(record) {
+  if (record.type !== 'assistant') return null;
+  const effort = record.perTurnEffort || record.effort;
+  return typeof effort === 'string' ? effort : null;
+}
+
 /** user/assistant record -> viewer message object (type already confirmed by toMessage) */
 function buildChatMessage(record, type) {
   const msg = record.message || {};
@@ -308,6 +315,7 @@ function buildChatMessage(record, type) {
     ts: record.timestamp || null,
     isSidechain: !!record.isSidechain,
     model: msg.model || null,
+    effort: recordEffort(record),
     usage: msg.usage || null,
     blocks,
   };
@@ -415,6 +423,7 @@ function forIndexMessage(record, recForkedFrom) {
     text,
     isUserPrompt: origin === 'human' && !record.isSidechain && !!text,
     model: msg.model || null,
+    effort: recordEffort(record),
     cwd: record.cwd || null,
     gitBranch: record.gitBranch || null,
     forkedFrom: recForkedFrom,

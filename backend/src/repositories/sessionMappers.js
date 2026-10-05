@@ -3,8 +3,8 @@
 // (the absolute on-disk jsonl path) is withheld, while `cwd` (also an absolute path) is deliberately included in
 // toSessionDto below because the UI displays it — safe here as this is a single-user, own-data viewer.
 
-/** model_names JSON -> string[]; a bad value/null returns [] (historical rows are null before backfill) */
-function parseModels(raw) {
+/** model_names / effort_names JSON -> string[]; a bad value/null returns [] (historical rows are null before backfill) */
+function parseNames(raw) {
   if (!raw) return [];
   try {
     const arr = JSON.parse(raw);
@@ -28,7 +28,9 @@ function toSessionDto(row) {
     task_kind: row.task_kind,
     team_name: row.team_name,
     model: row.model,
-    models: parseModels(row.model_names),
+    models: parseNames(row.model_names),
+    effort: row.effort ?? null,
+    efforts: parseNames(row.effort_names),
     title: row.title,
     first_ts: row.first_ts,
     last_ts: row.last_ts,

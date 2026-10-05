@@ -515,6 +515,15 @@ export function InfoPanel({ detail, onOpenSubagent, onOpenSession, onFlagsChange
               </button>
             )}
           </dd>
+          <dt className="text-muted-foreground">Effort</dt>
+          <dd className="font-mono">
+            {detail.effort ?? '—'}
+            {detail.efforts.length > 1 && (
+              <span className="ml-1 font-sans text-muted-foreground">
+                (also {detail.efforts.filter((e) => e !== detail.effort).join(', ')})
+              </span>
+            )}
+          </dd>
           <dt className="self-start text-muted-foreground">tokens</dt>
           <dd>
             <div className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5 font-mono">
